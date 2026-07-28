@@ -1,0 +1,35 @@
+{
+	"schemaVersion": 1,
+	"id": "rsl",
+	"version": "${version}",
+	"name": "Random SkyBlock Island",
+	"description": "A mod that randomly changes blocks on your SkyBlock island!",
+	"authors": [
+		"Yifei"
+	],
+	"contact": {
+		"homepage": "",
+		"sources": ""
+	},
+	"license": "MIT",
+	"icon": "assets/rsl/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"yifei.rsl.RandomSkyBlockIsland"
+		],
+		"modmenu": [
+			"yifei.rsl.config.ModMenuIntegration"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.2",
+		"minecraft": ">=1.20.1",
+		"java": ">=17",
+		"fabric-api": "*",
+		"cloth-config": ">=11.1.136"
+	},
+	"suggests": {
+		"modmenu": ">=7.2.2"
+	}
+}

@@ -1,0 +1,38 @@
+{
+  "rsl.config.title": "Random SkyBlock Island Config",
+  "rsl.config.category.settings": "Settings",
+  "rsl.config.category.area": "Area",
+  "rsl.config.transform_delay": "Transform Delay (seconds)",
+  "rsl.config.transform_delay.tooltip": "How often the blocks will change (default: 180 seconds)",
+  "rsl.config.min_x": "Min X",
+  "rsl.config.min_y": "Min Y",
+  "rsl.config.min_z": "Min Z",
+  "rsl.config.max_x": "Max X",
+  "rsl.config.max_y": "Max Y",
+  "rsl.config.max_z": "Max Z",
+  
+  "rsl.message.started": "Random SkyBlock Island started! Blocks will change every %ds.",
+  "rsl.message.stopped": "Random SkyBlock Island stopped!",
+  "rsl.message.changed": "Blocks changed to %s!",
+  "rsl.message.already_running": "Game is already running!",
+  "rsl.message.not_running": "Game is not running!",
+  "rsl.message.game_not_initialized": "Game not initialized!",
+  
+  "rsl.bossbar.title": "Blocks change in %d s",
+  
+  "rsl.message.area_added": "Area '%s' added: (%d, %d, %d) ~ (%d, %d, %d)",
+  "rsl.message.area_exists": "Area '%s' already exists!",
+  "rsl.message.area_removed": "Area '%s' removed!",
+  "rsl.message.area_not_found_or_last": "Area '%s' not found or cannot remove the last area!",
+  "rsl.message.area_renamed": "Area '%s' renamed to '%s'",
+  "rsl.message.area_rename_failed": "Failed to rename area!",
+  "rsl.message.area_pos1": "Position 1 set to: (%d, %d, %d)",
+  "rsl.message.area_pos2": "Position 2 set to: (%d, %d, %d)",
+  "rsl.message.area_setfrompos": "Area '%s' saved from positions: (%d, %d, %d) ~ (%d, %d, %d)",
+  "rsl.message.area_show": "Current area '%s': (%d, %d, %d) ~ (%d, %d, %d)",
+  "rsl.message.area_list_count": "Total %d areas:",
+  "rsl.message.area_list_item": "- %s: (%d, %d, %d) ~ (%d, %d, %d)",
+  
+  "rsl.message.delay_set": "Transform delay set to %ds",
+  "rsl.message.delay_show": "Current transform delay: %ds"
+}
