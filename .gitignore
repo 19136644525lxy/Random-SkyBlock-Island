@@ -25,6 +25,7 @@ bin/
 .project
 gradle-9.5.1/
 libs/
+temp/
 
 # macos
 

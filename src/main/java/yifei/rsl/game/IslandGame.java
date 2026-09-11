@@ -6,8 +6,10 @@ import yifei.rsl.config.TransformArea;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.util.WorldSavePath;
 import net.minecraft.world.World;
 
+import java.util.List;
 import java.util.Random;
 
 public class IslandGame {
@@ -23,6 +25,19 @@ public class IslandGame {
 		this.server = server;
 		this.random = new Random();
 		this.bossbar = new IslandBossbar();
+		
+		// 设置存档目录并加载存档区域
+		ModConfig.setSaveDir(server.getSavePath(WorldSavePath.ROOT));
+		ModConfig.loadSaveAreas();
+		
+		// 从配置恢复运行状态
+		if (ModConfig.isRunning) {
+			this.isRunning = true;
+			this.secondsRemaining = ModConfig.secondsRemaining;
+			this.tickCount = 0;
+			this.bossbar.createBossbar();
+			updateBossbar();
+		}
 	}
 	
 	public void tick() {
@@ -39,6 +54,9 @@ public class IslandGame {
 			
 			if (secondsRemaining <= 0) {
 				transformIsland();
+			} else {
+				ModConfig.secondsRemaining = secondsRemaining;
+				ModConfig.saveConfig();
 			}
 		}
 	}
@@ -55,6 +73,10 @@ public class IslandGame {
 		bossbar.createBossbar();
 		updateBossbar();
 		
+		ModConfig.isRunning = true;
+		ModConfig.secondsRemaining = secondsRemaining;
+		ModConfig.saveConfig();
+		
 		RandomSkyBlockIsland.LOGGER.info("Random SkyBlock Island game started!");
 		
 		for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
@@ -69,6 +91,10 @@ public class IslandGame {
 		
 		isRunning = false;
 		bossbar.removeBossbar();
+		
+		ModConfig.isRunning = false;
+		ModConfig.secondsRemaining = 0;
+		ModConfig.saveConfig();
 		
 		RandomSkyBlockIsland.LOGGER.info("Random SkyBlock Island game stopped!");
 		
@@ -88,26 +114,35 @@ public class IslandGame {
 			return;
 		}
 		
-		int blockIndex = random.nextInt(ModConfig.allowedBlocks.size());
-		var selectedBlock = ModConfig.allowedBlocks.get(blockIndex);
+		StringBuilder blockNames = new StringBuilder();
 		
-		for (TransformArea area : ModConfig.areas) {
+		for (TransformArea area : ModConfig.getAllAreas()) {
+			int blockIndex = random.nextInt(ModConfig.allowedBlocks.size());
+			var selectedBlock = ModConfig.allowedBlocks.get(blockIndex);
+			
 			BlockReplacer.fillArea(world,
 				area.minX, area.minY, area.minZ,
 				area.maxX, area.maxY, area.maxZ,
 				selectedBlock.getDefaultState()
 			);
+			
+			if (blockNames.length() > 0) {
+				blockNames.append(", ");
+			}
+			blockNames.append(area.name).append("=").append(selectedBlock.getName().getString());
+			
+			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+				player.sendMessage(Text.translatable("rsl.message.changed.area", area.name, selectedBlock.getName()), false);
+			}
 		}
 		
 		secondsRemaining = ModConfig.transformDelaySeconds;
 		updateBossbar();
 		
-		String blockName = selectedBlock.getName().getString();
-		for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-			player.sendMessage(Text.translatable("rsl.message.changed", selectedBlock.getName()), false);
-		}
+		ModConfig.secondsRemaining = secondsRemaining;
+		ModConfig.saveConfig();
 		
-		RandomSkyBlockIsland.LOGGER.info("Island transformed to: {}", blockName);
+		RandomSkyBlockIsland.LOGGER.info("Island transformed: {}", blockNames);
 	}
 	
 	private void updateBossbar() {
@@ -120,6 +155,10 @@ public class IslandGame {
 		if (isRunning) {
 			secondsRemaining = Math.min(secondsRemaining, ModConfig.transformDelaySeconds);
 		}
+	}
+	
+	public int getSecondsRemaining() {
+		return secondsRemaining;
 	}
 	
 	public IslandBossbar getBossbar() {

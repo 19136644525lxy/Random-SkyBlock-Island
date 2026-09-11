@@ -25,59 +25,6 @@ public class ModConfigScreen {
 			.build()
 		);
 		
-		if (!ModConfig.areas.isEmpty()) {
-			ConfigCategory area = builder.getOrCreateCategory(Text.translatable("rsl.config.category.area"));
-			TransformArea firstArea = ModConfig.areas.get(0);
-			
-			area.addEntry(entryBuilder.startIntField(
-					Text.translatable("rsl.config.min_x"),
-					firstArea.minX)
-				.setDefaultValue(-1)
-				.setSaveConsumer(newValue -> firstArea.minX = newValue)
-				.build()
-			);
-			
-			area.addEntry(entryBuilder.startIntField(
-					Text.translatable("rsl.config.min_y"),
-					firstArea.minY)
-				.setDefaultValue(64)
-				.setSaveConsumer(newValue -> firstArea.minY = newValue)
-				.build()
-			);
-			
-			area.addEntry(entryBuilder.startIntField(
-					Text.translatable("rsl.config.min_z"),
-					firstArea.minZ)
-				.setDefaultValue(-4)
-				.setSaveConsumer(newValue -> firstArea.minZ = newValue)
-				.build()
-			);
-			
-			area.addEntry(entryBuilder.startIntField(
-					Text.translatable("rsl.config.max_x"),
-					firstArea.maxX)
-				.setDefaultValue(4)
-				.setSaveConsumer(newValue -> firstArea.maxX = newValue)
-				.build()
-			);
-			
-			area.addEntry(entryBuilder.startIntField(
-					Text.translatable("rsl.config.max_y"),
-					firstArea.maxY)
-				.setDefaultValue(66)
-				.setSaveConsumer(newValue -> firstArea.maxY = newValue)
-				.build()
-			);
-			
-			area.addEntry(entryBuilder.startIntField(
-					Text.translatable("rsl.config.max_z"),
-					firstArea.maxZ)
-				.setDefaultValue(1)
-				.setSaveConsumer(newValue -> firstArea.maxZ = newValue)
-				.build()
-			);
-		}
-		
 		builder.setSavingRunnable(() -> {
 			ModConfig.saveConfig();
 			RandomSkyBlockIsland.LOGGER.info("Config saved");

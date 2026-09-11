@@ -1,19 +1,13 @@
 {
   "rsl.config.title": "随机空岛配置",
   "rsl.config.category.settings": "设置",
-  "rsl.config.category.area": "区域",
   "rsl.config.transform_delay": "变换间隔（秒）",
   "rsl.config.transform_delay.tooltip": "方块变换的时间间隔（默认：180秒）",
-  "rsl.config.min_x": "最小X",
-  "rsl.config.min_y": "最小Y",
-  "rsl.config.min_z": "最小Z",
-  "rsl.config.max_x": "最大X",
-  "rsl.config.max_y": "最大Y",
-  "rsl.config.max_z": "最大Z",
   
   "rsl.message.started": "随机空岛已启动！方块将每%d秒变换一次。",
   "rsl.message.stopped": "随机空岛已停止！",
   "rsl.message.changed": "方块已变换为 %s！",
+  "rsl.message.changed.area": "区域 %s 已变换为 %s！",
   "rsl.message.already_running": "游戏已在运行中！",
   "rsl.message.not_running": "游戏未运行！",
   "rsl.message.game_not_initialized": "游戏未初始化！",
@@ -34,5 +28,7 @@
   "rsl.message.area_list_item": "- %s: (%d, %d, %d) ~ (%d, %d, %d)",
   
   "rsl.message.delay_set": "变换间隔已设置为 %d秒",
-  "rsl.message.delay_show": "当前变换间隔: %d秒"
+  "rsl.message.delay_show": "当前变换间隔: %d秒",
+  
+  "rsl.message.reset_done": "游戏已重置！保留 %d 个区域和 %d 种方块配置"
 }

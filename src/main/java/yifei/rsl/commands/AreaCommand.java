@@ -14,6 +14,8 @@ import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
+import java.util.List;
+
 public class AreaCommand {
 	public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
 		dispatcher.register(
@@ -80,7 +82,7 @@ public class AreaCommand {
 		int maxZ = IntegerArgumentType.getInteger(context, "maxZ");
 		
 		if (ModConfig.addArea(name, minX, minY, minZ, maxX, maxY, maxZ)) {
-			ModConfig.saveConfig();
+			ModConfig.saveSaveAreas();
 			context.getSource().sendFeedback(
 				() -> Text.translatable("rsl.message.area_added", name, minX, minY, minZ, maxX, maxY, maxZ),
 				false
@@ -96,7 +98,7 @@ public class AreaCommand {
 		String name = StringArgumentType.getString(context, "name");
 		
 		if (ModConfig.removeArea(name)) {
-			ModConfig.saveConfig();
+			ModConfig.saveSaveAreas();
 			context.getSource().sendFeedback(
 				() -> Text.translatable("rsl.message.area_removed", name),
 				false
@@ -107,13 +109,19 @@ public class AreaCommand {
 		
 		return 1;
 	}
-	
+
 	private static int executeRename(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
 		String oldName = StringArgumentType.getString(context, "oldName");
 		String newName = StringArgumentType.getString(context, "newName");
 		
+		boolean isDefault = ModConfig.defaultArea.name.equals(oldName);
+		
 		if (ModConfig.renameArea(oldName, newName)) {
-			ModConfig.saveConfig();
+			if (isDefault) {
+				ModConfig.saveConfig();
+			} else {
+				ModConfig.saveSaveAreas();
+			}
 			context.getSource().sendFeedback(
 				() -> Text.translatable("rsl.message.area_renamed", oldName, newName),
 				false
@@ -129,12 +137,10 @@ public class AreaCommand {
 		var vec3 = context.getSource().getPosition();
 		BlockPos pos = new BlockPos((int)vec3.x, (int)vec3.y, (int)vec3.z);
 		
-		if (!ModConfig.areas.isEmpty()) {
-			TransformArea area = ModConfig.areas.get(0);
-			area.minX = pos.getX();
-			area.minY = pos.getY();
-			area.minZ = pos.getZ();
-		}
+		ModConfig.defaultArea.minX = pos.getX();
+		ModConfig.defaultArea.minY = pos.getY();
+		ModConfig.defaultArea.minZ = pos.getZ();
+		ModConfig.saveConfig();
 		
 		context.getSource().sendFeedback(
 			() -> Text.translatable("rsl.message.area_pos1", pos.getX(), pos.getY(), pos.getZ()),
@@ -143,17 +149,15 @@ public class AreaCommand {
 		
 		return 1;
 	}
-	
+
 	private static int executePos2(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
 		var vec3 = context.getSource().getPosition();
 		BlockPos pos = new BlockPos((int)vec3.x, (int)vec3.y, (int)vec3.z);
 		
-		if (!ModConfig.areas.isEmpty()) {
-			TransformArea area = ModConfig.areas.get(0);
-			area.maxX = pos.getX();
-			area.maxY = pos.getY();
-			area.maxZ = pos.getZ();
-		}
+		ModConfig.defaultArea.maxX = pos.getX();
+		ModConfig.defaultArea.maxY = pos.getY();
+		ModConfig.defaultArea.maxZ = pos.getZ();
+		ModConfig.saveConfig();
 		
 		context.getSource().sendFeedback(
 			() -> Text.translatable("rsl.message.area_pos2", pos.getX(), pos.getY(), pos.getZ()),
@@ -162,48 +166,45 @@ public class AreaCommand {
 		
 		return 1;
 	}
-	
+
 	private static int executeSetFromPos(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
 		String name = StringArgumentType.getString(context, "name");
 		
-		if (!ModConfig.areas.isEmpty()) {
-			TransformArea area = ModConfig.areas.get(0);
-			ModConfig.addArea(name, area.minX, area.minY, area.minZ, area.maxX, area.maxY, area.maxZ);
-			ModConfig.saveConfig();
-			
-			context.getSource().sendFeedback(
-				() -> Text.translatable("rsl.message.area_setfrompos", name,
-					area.minX, area.minY, area.minZ,
-					area.maxX, area.maxY, area.maxZ),
-				false
-			);
-		}
+		TransformArea area = ModConfig.defaultArea;
+		ModConfig.addArea(name, area.minX, area.minY, area.minZ, area.maxX, area.maxY, area.maxZ);
+		ModConfig.saveSaveAreas();
 		
-		return 1;
-	}
-	
-	private static int executeShow(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-		if (!ModConfig.areas.isEmpty()) {
-			TransformArea area = ModConfig.areas.get(0);
-			context.getSource().sendFeedback(
-				() -> Text.translatable("rsl.message.area_show",
-					area.name,
-					area.minX, area.minY, area.minZ,
-					area.maxX, area.maxY, area.maxZ),
-				false
-			);
-		}
-		
-		return 1;
-	}
-	
-	private static int executeList(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
 		context.getSource().sendFeedback(
-			() -> Text.translatable("rsl.message.area_list_count", ModConfig.areas.size()),
+			() -> Text.translatable("rsl.message.area_setfrompos", name,
+				area.minX, area.minY, area.minZ,
+				area.maxX, area.maxY, area.maxZ),
 			false
 		);
 		
-		for (TransformArea area : ModConfig.areas) {
+		return 1;
+	}
+
+	private static int executeShow(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		TransformArea area = ModConfig.defaultArea;
+		context.getSource().sendFeedback(
+			() -> Text.translatable("rsl.message.area_show",
+				area.name,
+				area.minX, area.minY, area.minZ,
+				area.maxX, area.maxY, area.maxZ),
+			false
+		);
+		
+		return 1;
+	}
+
+	private static int executeList(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		List<TransformArea> allAreas = ModConfig.getAllAreas();
+		context.getSource().sendFeedback(
+			() -> Text.translatable("rsl.message.area_list_count", allAreas.size()),
+			false
+		);
+		
+		for (TransformArea area : allAreas) {
 			context.getSource().sendFeedback(
 				() -> Text.translatable("rsl.message.area_list_item",
 					area.name,

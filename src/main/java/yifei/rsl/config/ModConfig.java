@@ -17,18 +17,35 @@ import java.util.List;
 
 public class ModConfig {
 	private static final String CONFIG_FILE = "randomskyblockisland.json";
+	private static final String SAVE_AREAS_FILE = "rsl_areas.json";
 	
+	// 全局配置（config/randomskyblockisland.json）
 	public static int transformDelaySeconds = 180;
-	public static List<TransformArea> areas = new ArrayList<>();
+	public static int secondsRemaining = 0;
+	public static boolean isRunning = false;
+	public static TransformArea defaultArea = new TransformArea("default", -1, 64, -4, 4, 66, 1);
 	public static List<Block> allowedBlocks = new ArrayList<>();
+	
+	// 存档配置（<存档>/rsl_areas.json）
+	public static List<TransformArea> saveAreas = new ArrayList<>();
+	
+	// 存档目录（服务器启动时设置）
+	private static Path saveDir = null;
 	
 	static {
 		addDefaultBlocks();
-		addDefaultArea();
 	}
 	
-	private static void addDefaultArea() {
-		areas.add(new TransformArea("default", -1, 64, -4, 4, 66, 1));
+	/** 合并所有区域（游戏逻辑用） */
+	public static List<TransformArea> getAllAreas() {
+		List<TransformArea> all = new ArrayList<>();
+		all.add(defaultArea);
+		all.addAll(saveAreas);
+		return all;
+	}
+	
+	public static void setSaveDir(Path dir) {
+		saveDir = dir;
 	}
 	
 	private static void addDefaultBlocks() {
@@ -365,26 +382,17 @@ public class ModConfig {
 		StringBuilder sb = new StringBuilder();
 		sb.append("{\n");
 		sb.append("  \"transformDelaySeconds\": ").append(transformDelaySeconds).append(",\n");
-		sb.append("  \"areas\": [\n");
-		
-		for (int i = 0; i < areas.size(); i++) {
-			TransformArea area = areas.get(i);
-			sb.append("    {\n");
-			sb.append("      \"name\": \"").append(area.name).append("\",\n");
-			sb.append("      \"minX\": ").append(area.minX).append(",\n");
-			sb.append("      \"minY\": ").append(area.minY).append(",\n");
-			sb.append("      \"minZ\": ").append(area.minZ).append(",\n");
-			sb.append("      \"maxX\": ").append(area.maxX).append(",\n");
-			sb.append("      \"maxY\": ").append(area.maxY).append(",\n");
-			sb.append("      \"maxZ\": ").append(area.maxZ).append("\n");
-			sb.append("    }");
-			if (i < areas.size() - 1) {
-				sb.append(",");
-			}
-			sb.append("\n");
-		}
-		
-		sb.append("  ],\n");
+		sb.append("  \"secondsRemaining\": ").append(secondsRemaining).append(",\n");
+		sb.append("  \"isRunning\": ").append(isRunning).append(",\n");
+		sb.append("  \"defaultArea\": {\n");
+		sb.append("    \"name\": \"").append(defaultArea.name).append("\",\n");
+		sb.append("    \"minX\": ").append(defaultArea.minX).append(",\n");
+		sb.append("    \"minY\": ").append(defaultArea.minY).append(",\n");
+		sb.append("    \"minZ\": ").append(defaultArea.minZ).append(",\n");
+		sb.append("    \"maxX\": ").append(defaultArea.maxX).append(",\n");
+		sb.append("    \"maxY\": ").append(defaultArea.maxY).append(",\n");
+		sb.append("    \"maxZ\": ").append(defaultArea.maxZ).append("\n");
+		sb.append("  },\n");
 		sb.append("  \"allowedBlocks\": [\n");
 		
 		for (int i = 0; i < allowedBlocks.size(); i++) {
@@ -406,25 +414,31 @@ public class ModConfig {
 	private static void parseConfig(String json) {
 		try {
 			String delayStr = extractValue(json, "\"transformDelaySeconds\"");
-			if (delayStr != null) {
-				transformDelaySeconds = Integer.parseInt(delayStr);
-			}
-			
+		if (delayStr != null) {
+			transformDelaySeconds = Integer.parseInt(delayStr);
+		}
+		
+		String remainingStr = extractValue(json, "\"secondsRemaining\"");
+		if (remainingStr != null) {
+			secondsRemaining = Integer.parseInt(remainingStr);
+		}
+		
+		String runningStr = extractValue(json, "\"isRunning\"");
+		if (runningStr != null) {
+			isRunning = Boolean.parseBoolean(runningStr);
+		}
+		
+		// 解析默认区域
+		String defaultAreaStr = extractValue(json, "\"defaultArea\"");
+		if (defaultAreaStr != null) {
+			parseDefaultArea(defaultAreaStr);
+		} else {
+			// 向后兼容：旧格式用 areas 数组，第一个作为 defaultArea，其余迁移到 saveAreas
 			String areasStr = extractValue(json, "\"areas\"");
 			if (areasStr != null) {
-				areas.clear();
-				parseAreas(areasStr);
-			} else {
-				String areaStr = extractValue(json, "\"area\"");
-				if (areaStr != null) {
-					areas.clear();
-					parseSingleArea(areaStr);
-				}
+				parseAreasCompat(areasStr);
 			}
-			
-			if (areas.isEmpty()) {
-				addDefaultArea();
-			}
+		}
 			
 			String blocksStr = extractValue(json, "\"allowedBlocks\"");
 			if (blocksStr != null) {
@@ -450,7 +464,133 @@ public class ModConfig {
 		}
 	}
 	
-	private static void parseAreas(String areasStr) {
+	/** 向后兼容：旧 areas 数组，第一个→defaultArea，其余→saveAreas */
+	private static void parseAreasCompat(String areasStr) {
+		int start = areasStr.indexOf("[");
+		if (start < 0) return;
+		
+		int pos = start + 1;
+		boolean isFirst = true;
+		while (pos < areasStr.length()) {
+			int braceStart = areasStr.indexOf("{", pos);
+			if (braceStart < 0) break;
+			
+			int braceCount = 1;
+			int braceEnd = braceStart + 1;
+			while (braceEnd < areasStr.length() && braceCount > 0) {
+				if (areasStr.charAt(braceEnd) == '{') braceCount++;
+				if (areasStr.charAt(braceEnd) == '}') braceCount--;
+				braceEnd++;
+			}
+			
+			String areaStr = areasStr.substring(braceStart, braceEnd);
+			if (isFirst) {
+				parseDefaultArea(areaStr);
+				isFirst = false;
+			} else {
+				parseSaveArea(areaStr);
+			}
+			pos = braceEnd;
+		}
+	}
+	
+	private static void parseDefaultArea(String areaStr) {
+		try {
+			String name = extractValue(areaStr, "\"name\"");
+			if (name != null) {
+				name = name.replace("\"", "");
+			} else {
+				name = "default";
+			}
+			
+			int minX = parseIntValue(areaStr, "\"minX\"");
+			int minY = parseIntValue(areaStr, "\"minY\"");
+			int minZ = parseIntValue(areaStr, "\"minZ\"");
+			int maxX = parseIntValue(areaStr, "\"maxX\"");
+			int maxY = parseIntValue(areaStr, "\"maxY\"");
+			int maxZ = parseIntValue(areaStr, "\"maxZ\"");
+			
+			defaultArea = new TransformArea(name, minX, minY, minZ, maxX, maxY, maxZ);
+		} catch (Exception e) {
+			RandomSkyBlockIsland.LOGGER.warn("Failed to parse default area: {}", e.getMessage());
+		}
+	}
+	
+	private static void parseSaveArea(String areaStr) {
+		try {
+			String name = extractValue(areaStr, "\"name\"");
+			if (name != null) {
+				name = name.replace("\"", "");
+			} else {
+				name = "area_" + saveAreas.size();
+			}
+			
+			int minX = parseIntValue(areaStr, "\"minX\"");
+			int minY = parseIntValue(areaStr, "\"minY\"");
+			int minZ = parseIntValue(areaStr, "\"minZ\"");
+			int maxX = parseIntValue(areaStr, "\"maxX\"");
+			int maxY = parseIntValue(areaStr, "\"maxY\"");
+			int maxZ = parseIntValue(areaStr, "\"maxZ\"");
+			
+			saveAreas.add(new TransformArea(name, minX, minY, minZ, maxX, maxY, maxZ));
+		} catch (Exception e) {
+			RandomSkyBlockIsland.LOGGER.warn("Failed to parse save area: {}", e.getMessage());
+		}
+	}
+	
+	// ========== 存档区域配置 ==========
+	
+	public static void loadSaveAreas() {
+		if (saveDir == null) return;
+		Path areasPath = saveDir.resolve(SAVE_AREAS_FILE);
+		
+		if (Files.exists(areasPath)) {
+			try (BufferedReader reader = Files.newBufferedReader(areasPath)) {
+				String json = reader.lines().reduce("", (a, b) -> a + b);
+				saveAreas.clear();
+				String areasStr = extractValue(json, "\"areas\"");
+				if (areasStr != null) {
+					parseSaveAreasArray(areasStr);
+				}
+				RandomSkyBlockIsland.LOGGER.info("Save areas loaded from file");
+			} catch (IOException e) {
+				RandomSkyBlockIsland.LOGGER.warn("Failed to load save areas: {}", e.getMessage());
+			}
+		}
+	}
+	
+	public static void saveSaveAreas() {
+		if (saveDir == null) return;
+		Path areasPath = saveDir.resolve(SAVE_AREAS_FILE);
+		
+		try {
+			StringBuilder sb = new StringBuilder();
+			sb.append("{\n  \"areas\": [\n");
+			for (int i = 0; i < saveAreas.size(); i++) {
+				TransformArea area = saveAreas.get(i);
+				sb.append("    {\n");
+				sb.append("      \"name\": \"").append(area.name).append("\",\n");
+				sb.append("      \"minX\": ").append(area.minX).append(",\n");
+				sb.append("      \"minY\": ").append(area.minY).append(",\n");
+				sb.append("      \"minZ\": ").append(area.minZ).append(",\n");
+				sb.append("      \"maxX\": ").append(area.maxX).append(",\n");
+				sb.append("      \"maxY\": ").append(area.maxY).append(",\n");
+				sb.append("      \"maxZ\": ").append(area.maxZ).append("\n");
+				sb.append("    }");
+				if (i < saveAreas.size() - 1) sb.append(",");
+				sb.append("\n");
+			}
+			sb.append("  ]\n}");
+			
+			try (BufferedWriter writer = Files.newBufferedWriter(areasPath)) {
+				writer.write(sb.toString());
+			}
+		} catch (IOException e) {
+			RandomSkyBlockIsland.LOGGER.warn("Failed to save save areas: {}", e.getMessage());
+		}
+	}
+	
+	private static void parseSaveAreasArray(String areasStr) {
 		int start = areasStr.indexOf("[");
 		if (start < 0) return;
 		
@@ -468,57 +608,40 @@ public class ModConfig {
 			}
 			
 			String areaStr = areasStr.substring(braceStart, braceEnd);
-			parseSingleArea(areaStr);
+			parseSaveArea(areaStr);
 			pos = braceEnd;
 		}
 	}
 	
-	private static void parseSingleArea(String areaStr) {
-		try {
-			String name = extractValue(areaStr, "\"name\"");
-			if (name != null) {
-				name = name.replace("\"", "");
-			} else {
-				name = "area_" + areas.size();
-			}
-			
-			int minX = parseIntValue(areaStr, "\"minX\"");
-			int minY = parseIntValue(areaStr, "\"minY\"");
-			int minZ = parseIntValue(areaStr, "\"minZ\"");
-			int maxX = parseIntValue(areaStr, "\"maxX\"");
-			int maxY = parseIntValue(areaStr, "\"maxY\"");
-			int maxZ = parseIntValue(areaStr, "\"maxZ\"");
-			
-			areas.add(new TransformArea(name, minX, minY, minZ, maxX, maxY, maxZ));
-		} catch (Exception e) {
-			RandomSkyBlockIsland.LOGGER.warn("Failed to parse area: {}", e.getMessage());
-		}
-	}
+	// ========== 区域管理 ==========
 	
 	public static TransformArea getAreaByName(String name) {
-		return areas.stream().filter(a -> a.name.equals(name)).findFirst().orElse(null);
+		if (defaultArea.name.equals(name)) return defaultArea;
+		return saveAreas.stream().filter(a -> a.name.equals(name)).findFirst().orElse(null);
 	}
 	
 	public static boolean addArea(String name, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
 		if (getAreaByName(name) != null) {
 			return false;
 		}
-		areas.add(new TransformArea(name, minX, minY, minZ, maxX, maxY, maxZ));
+		saveAreas.add(new TransformArea(name, minX, minY, minZ, maxX, maxY, maxZ));
 		return true;
 	}
 	
 	public static boolean removeArea(String name) {
-		if (areas.size() <= 1) {
-			return false;
-		}
-		return areas.removeIf(a -> a.name.equals(name));
+		// 不能删除默认区域
+		if (defaultArea.name.equals(name)) return false;
+		return saveAreas.removeIf(a -> a.name.equals(name));
 	}
 	
 	public static boolean renameArea(String oldName, String newName) {
-		TransformArea area = getAreaByName(oldName);
-		if (area == null || getAreaByName(newName) != null) {
-			return false;
+		if (getAreaByName(newName) != null) return false;
+		if (defaultArea.name.equals(oldName)) {
+			defaultArea.name = newName;
+			return true;
 		}
+		TransformArea area = saveAreas.stream().filter(a -> a.name.equals(oldName)).findFirst().orElse(null);
+		if (area == null) return false;
 		area.name = newName;
 		return true;
 	}
