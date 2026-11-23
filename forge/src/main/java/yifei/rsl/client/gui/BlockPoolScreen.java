@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
@@ -59,6 +60,7 @@ public class BlockPoolScreen extends Screen {
     private Button hideButton;
     private Button hiddenPoolButton;
     private Button refreshButton;
+    private Button manageButton;
     private Button pagePrevButton;
     private Button pageNextButton;
     private View view = View.ALL;
@@ -138,6 +140,11 @@ public class BlockPoolScreen extends Screen {
         refreshButton = addRenderableWidget(Button.builder(refreshLabel(), b -> refresh())
                 .bounds(layout.action2StartX + (layout.action2ButtonWidth + gap) * 2, layout.action2Y,
                         layout.action2ButtonWidth, height).build());
+        manageButton = addRenderableWidget(Button.builder(Component.translatable("rsl.pool.manage"),
+                        b -> openManageScreen())
+                .bounds(layout.action2StartX + (layout.action2ButtonWidth + gap) * 3, layout.action2Y,
+                        layout.action2ButtonWidth, height).build());
+        manageButton.setTooltip(Tooltip.create(Component.translatable("rsl.pool.manage_tooltip")));
 
         page = clampPage(page);
         updateControls();
@@ -346,6 +353,23 @@ public class BlockPoolScreen extends Screen {
         return snapshot != null && snapshot.canEdit;
     }
 
+    private void openManageScreen() {
+        if (hiddenFile == null || !canEditPool()) {
+            return;
+        }
+        Minecraft.getInstance().setScreen(new HiddenPoolScreen(this, hiddenFile));
+    }
+
+    /** Reloads the hidden list after the manager copied another save's list. */
+    void reloadHiddenFile() {
+        if (hiddenFile == null) {
+            return;
+        }
+        hiddenFile.reload();
+        rebuildFiltered();
+        updateControls();
+    }
+
     private void updateControls() {
         boolean hasSnapshot = snapshot != null;
         boolean canEdit = canEditPool() && view != View.HIDDEN && !hidingMode;
@@ -374,6 +398,9 @@ public class BlockPoolScreen extends Screen {
         if (refreshButton != null) {
             refreshButton.active = hasSnapshot && !hidingMode && !pending && !refreshPending;
             refreshButton.setMessage(refreshLabel());
+        }
+        if (manageButton != null) {
+            manageButton.active = canEdit && !pending && !refreshPending;
         }
         if (pagePrevButton != null) {
             pagePrevButton.active = page > 0;
@@ -443,14 +470,20 @@ public class BlockPoolScreen extends Screen {
     }
 
     private Component countText() {
+        MutableComponent text;
         if (view == View.HIDDEN) {
-            return Component.translatable("rsl.pool.count_hidden", filtered.size(), hiddenCount());
+            text = Component.translatable("rsl.pool.count_hidden", filtered.size(), hiddenCount());
+        } else {
+            int total = view == View.CURRENT_POOL
+                    ? visibleCount(snapshot.poolIds)
+                    : visibleCount(snapshot.allBlockIds);
+            String key = view == View.CURRENT_POOL ? "rsl.pool.count_pool" : "rsl.pool.count";
+            text = Component.translatable(key, filtered.size(), total, selected.size());
         }
-        int total = view == View.CURRENT_POOL
-                ? visibleCount(snapshot.poolIds)
-                : visibleCount(snapshot.allBlockIds);
-        String key = view == View.CURRENT_POOL ? "rsl.pool.count_pool" : "rsl.pool.count";
-        return Component.translatable(key, filtered.size(), total, selected.size());
+        if (hiddenFile != null && !hiddenFile.name().isEmpty()) {
+            text.append(" · " + hiddenFile.name());
+        }
+        return text;
     }
 
     private int pageCount() {

@@ -15,8 +15,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Per-context persistence for {@link HiddenBlocks}. A context is a save or a
@@ -31,6 +34,7 @@ public final class HiddenBlocksFile {
     private static final String CORRUPT_PREFIX = "rsl-hidden-blocks.corrupt-";
     private static final DateTimeFormatter TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final int MAX_NAME_LENGTH = 32;
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .disableHtmlEscaping()
@@ -39,6 +43,7 @@ public final class HiddenBlocksFile {
     private final Path path;
     private final String contextKey;
     private HiddenBlocks blocks = new HiddenBlocks();
+    private String name = "";
     private boolean loadError;
 
     private HiddenBlocksFile(Path path, String contextKey) {
@@ -82,6 +87,7 @@ public final class HiddenBlocksFile {
      */
     public boolean reload() {
         HiddenBlocks loaded = new HiddenBlocks();
+        name = "";
         loadError = false;
         if (!Files.exists(path)) {
             blocks = loaded;
@@ -91,6 +97,9 @@ public final class HiddenBlocksFile {
             Payload payload = read(path);
             if (payload != null && payload.hidden != null) {
                 loaded.hideAll(payload.hidden);
+            }
+            if (payload != null && payload.name != null) {
+                name = payload.name.trim();
             }
             blocks = loaded;
             return true;
@@ -111,6 +120,7 @@ public final class HiddenBlocksFile {
             Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
             Payload payload = new Payload();
             payload.context = contextKey;
+            payload.name = name.isEmpty() ? null : name;
             payload.hidden = blocks.list();
             try (Writer writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
                 GSON.toJson(payload, writer);
@@ -131,12 +141,113 @@ public final class HiddenBlocksFile {
         return blocks;
     }
 
+    /**
+     * Copies the hidden list and display name from another context file into
+     * this one. Used by the "copy from another save" picker. The current state
+     * is restored when saving fails.
+     */
+    public boolean importFrom(Path source) {
+        if (source == null || !Files.exists(source) || source.toAbsolutePath().equals(
+                path.toAbsolutePath())) {
+            return false;
+        }
+        try {
+            Payload payload = read(source);
+            if (payload == null || payload.hidden == null) {
+                return false;
+            }
+            HiddenBlocks previousBlocks = blocks;
+            String previousName = name;
+            HiddenBlocks next = new HiddenBlocks();
+            next.hideAll(payload.hidden);
+            blocks = next;
+            setName(payload.name == null ? "" : payload.name);
+            if (save()) {
+                return true;
+            }
+            blocks = previousBlocks;
+            name = previousName;
+            return false;
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    /**
+     * Lists every hidden-list file under the config directory, newest first.
+     * Corrupt or unreadable files are skipped.
+     */
+    public static List<PoolInfo> listAll(Path configDir) {
+        Path directory = configDir.resolve(DIRECTORY_NAME);
+        if (!Files.isDirectory(directory)) {
+            return List.of();
+        }
+        List<PoolInfo> pools = new ArrayList<>();
+        try (Stream<Path> files = Files.list(directory)) {
+            files.filter(candidate -> candidate.getFileName().toString().endsWith(".json"))
+                    .filter(candidate -> !candidate.getFileName().toString()
+                            .startsWith(CORRUPT_PREFIX))
+                    .forEach(candidate -> {
+                        try {
+                            Payload payload = read(candidate);
+                            if (payload == null) {
+                                return;
+                            }
+                            int count = payload.hidden == null ? 0 : payload.hidden.size();
+                            String context = payload.context == null ? "" : payload.context.trim();
+                            String displayName = payload.name == null ? "" : payload.name.trim();
+                            pools.add(new PoolInfo(candidate, context, displayName, count,
+                                    Files.getLastModifiedTime(candidate).toMillis()));
+                        } catch (Exception ignored) {
+                            // Skip unreadable files; the rest of the list is still useful.
+                        }
+                    });
+        } catch (IOException exception) {
+            return List.of();
+        }
+        pools.sort(Comparator.comparingLong(PoolInfo::modifiedAt).reversed());
+        return pools;
+    }
+
+    /** One hidden-list file on disk, as shown by the copy picker. */
+    public record PoolInfo(Path path, String contextKey, String name, int count, long modifiedAt) {
+        public String displayName() {
+            if (name != null && !name.isEmpty()) {
+                return name;
+            }
+            return contextKey == null || contextKey.isEmpty()
+                    ? path.getFileName().toString()
+                    : contextKey;
+        }
+    }
+
     public Path path() {
         return path;
     }
 
     public String contextKey() {
         return contextKey;
+    }
+
+    /** Display name of this hidden list; empty when unnamed. */
+    public String name() {
+        return name;
+    }
+
+    /**
+     * Updates the display name. Blank clears it and long values are truncated.
+     * Returns true when the stored name changed.
+     */
+    public boolean setName(String value) {
+        String next = value == null ? "" : value.trim();
+        if (next.length() > MAX_NAME_LENGTH) {
+            next = next.substring(0, MAX_NAME_LENGTH);
+        }
+        if (next.equals(name)) {
+            return false;
+        }
+        name = next;
+        return true;
     }
 
     public boolean hadLoadError() {
@@ -207,6 +318,7 @@ public final class HiddenBlocksFile {
 
     private static final class Payload {
         private String context;
+        private String name;
         private List<String> hidden;
     }
 }

@@ -133,4 +133,85 @@ class HiddenBlocksFileTest {
         assertTrue(file.blocks().isEmpty());
         assertFalse(Files.exists(file.path()));
     }
+
+    @Test
+    void nameRoundTripsAndIsOptional() {
+        HiddenBlocksFile file = HiddenBlocksFile.load(directory);
+        assertTrue(file.name().isEmpty());
+        assertTrue(file.setName("石头集合"));
+        file.blocks().hideAll(List.of("minecraft:stone"));
+        assertTrue(file.save());
+
+        HiddenBlocksFile reloaded = HiddenBlocksFile.load(directory);
+        assertEquals("石头集合", reloaded.name());
+        assertTrue(reloaded.blocks().isHidden("minecraft:stone"));
+
+        assertTrue(reloaded.setName(""));
+        assertTrue(reloaded.save());
+        assertEquals("", HiddenBlocksFile.load(directory).name());
+    }
+
+    @Test
+    void nameIsTrimmedTruncatedAndChangeAware() {
+        HiddenBlocksFile file = HiddenBlocksFile.load(directory);
+        assertTrue(file.setName("  abc  "));
+        assertEquals("abc", file.name());
+        assertFalse(file.setName("abc"));
+        file.setName("x".repeat(40));
+        assertEquals(32, file.name().length());
+    }
+
+    @Test
+    void listAllReportsEveryContextFile() {
+        Path config = directory.resolve("config");
+        HiddenBlocksFile first = HiddenBlocksFile.load(config, "sp:first");
+        first.setName("石头集合");
+        first.blocks().hideAll(List.of("minecraft:stone"));
+        assertTrue(first.save());
+        HiddenBlocksFile second = HiddenBlocksFile.load(config, "sp:second");
+        second.blocks().hideAll(List.of("minecraft:dirt", "minecraft:gravel"));
+        assertTrue(second.save());
+
+        List<HiddenBlocksFile.PoolInfo> pools = HiddenBlocksFile.listAll(config);
+
+        assertEquals(2, pools.size());
+        HiddenBlocksFile.PoolInfo named = pools.stream()
+                .filter(pool -> "石头集合".equals(pool.name())).findFirst().orElseThrow();
+        assertEquals("sp:first", named.contextKey());
+        assertEquals(1, named.count());
+        HiddenBlocksFile.PoolInfo unnamed = pools.stream()
+                .filter(pool -> "sp:second".equals(pool.contextKey())).findFirst().orElseThrow();
+        assertEquals(2, unnamed.count());
+        assertEquals("sp:second", unnamed.displayName());
+    }
+
+    @Test
+    void importFromCopiesBlocksAndName() {
+        Path config = directory.resolve("config");
+        HiddenBlocksFile source = HiddenBlocksFile.load(config, "sp:source");
+        source.setName("来源池");
+        source.blocks().hideAll(List.of("minecraft:stone", "modid:custom"));
+        assertTrue(source.save());
+
+        HiddenBlocksFile target = HiddenBlocksFile.load(config, "sp:target");
+        assertTrue(target.importFrom(source.path()));
+        assertEquals("来源池", target.name());
+        assertEquals(List.of("minecraft:stone", "modid:custom"), target.blocks().list());
+
+        HiddenBlocksFile reloaded = HiddenBlocksFile.load(config, "sp:target");
+        assertEquals("来源池", reloaded.name());
+        assertEquals(2, reloaded.blocks().count());
+    }
+
+    @Test
+    void importFromRejectsMissingAndSelf() {
+        Path config = directory.resolve("config");
+        HiddenBlocksFile file = HiddenBlocksFile.load(config, "sp:one");
+        file.blocks().hideAll(List.of("minecraft:stone"));
+        assertTrue(file.save());
+
+        assertFalse(file.importFrom(file.path()));
+        assertFalse(file.importFrom(config.resolve("missing.json")));
+        assertEquals(1, file.blocks().count());
+    }
 }

@@ -12,6 +12,7 @@ import net.minecraft.client.network.ServerInfo;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.integrated.IntegratedServer;
+import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.WorldSavePath;
@@ -59,6 +60,7 @@ public class BlockPoolScreen extends Screen {
     private ButtonWidget hideButton;
     private ButtonWidget hiddenPoolButton;
     private ButtonWidget refreshButton;
+    private ButtonWidget manageButton;
     private ButtonWidget pagePrevButton;
     private ButtonWidget pageNextButton;
     private View view = View.ALL;
@@ -139,18 +141,41 @@ public class BlockPoolScreen extends Screen {
         refreshButton = addDrawableChild(ButtonWidget.builder(refreshLabel(), b -> refresh())
                 .dimensions(layout.action2StartX + (layout.action2ButtonWidth + gap) * 2, layout.action2Y,
                         layout.action2ButtonWidth, height).build());
+        manageButton = addDrawableChild(ButtonWidget.builder(Text.translatable("rsl.pool.manage"),
+                        b -> openManageScreen())
+                .dimensions(layout.action2StartX + (layout.action2ButtonWidth + gap) * 3, layout.action2Y,
+                        layout.action2ButtonWidth, height).build());
+        manageButton.setTooltip(Tooltip.of(Text.translatable("rsl.pool.manage_tooltip")));
 
         page = clampPage(page);
         updateControls();
         BlockPoolClientNetwork.requestSnapshot();
     }
 
+    private void openManageScreen() {
+        if (hiddenFile == null || !canEditPool()) {
+            return;
+        }
+        if (this.client != null) {
+            this.client.setScreen(new HiddenPoolScreen(this, hiddenFile));
+        }
+    }
+
+    /** Reloads the hidden list after the manager copied another save's list. */
+    void reloadHiddenFile() {
+        if (hiddenFile == null) {
+            return;
+        }
+        hiddenFile.reload();
+        rebuildFiltered();
+        updateControls();
+    }
+
     /**
      * A save keeps its own hidden list. Guests on a LAN or multiplayer server
      * have no access to the host save, so the server address is used instead.
      */
-    private static String currentContextKey() {
-        MinecraftClient client = MinecraftClient.getInstance();
+    private static String currentContextKey() {        MinecraftClient client = MinecraftClient.getInstance();
         IntegratedServer server = client.getServer();
         if (server != null) {
             Path root = server.getSavePath(WorldSavePath.ROOT);
@@ -376,6 +401,9 @@ public class BlockPoolScreen extends Screen {
             refreshButton.active = hasSnapshot && !hidingMode && !pending && !refreshPending;
             refreshButton.setMessage(refreshLabel());
         }
+        if (manageButton != null) {
+            manageButton.active = canEdit && !pending && !refreshPending;
+        }
         if (pagePrevButton != null) {
             pagePrevButton.active = page > 0;
         }
@@ -444,14 +472,20 @@ public class BlockPoolScreen extends Screen {
     }
 
     private Text countText() {
+        MutableText text;
         if (view == View.HIDDEN) {
-            return Text.translatable("rsl.pool.count_hidden", filtered.size(), hiddenCount());
+            text = Text.translatable("rsl.pool.count_hidden", filtered.size(), hiddenCount());
+        } else {
+            int total = view == View.CURRENT_POOL
+                    ? visibleCount(snapshot.poolIds)
+                    : visibleCount(snapshot.allBlockIds);
+            String key = view == View.CURRENT_POOL ? "rsl.pool.count_pool" : "rsl.pool.count";
+            text = Text.translatable(key, filtered.size(), total, selected.size());
         }
-        int total = view == View.CURRENT_POOL
-                ? visibleCount(snapshot.poolIds)
-                : visibleCount(snapshot.allBlockIds);
-        String key = view == View.CURRENT_POOL ? "rsl.pool.count_pool" : "rsl.pool.count";
-        return Text.translatable(key, filtered.size(), total, selected.size());
+        if (hiddenFile != null && !hiddenFile.name().isEmpty()) {
+            text.append(Text.literal(" · " + hiddenFile.name()));
+        }
+        return text;
     }
 
     private int pageCount() {
