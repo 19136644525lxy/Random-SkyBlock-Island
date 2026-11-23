@@ -15,8 +15,8 @@ public class DelayCommand {
 	public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
 		dispatcher.register(
 			CommandManager.literal("randomskyblock")
-				.requires(source -> source.hasPermissionLevel(4))
 				.then(CommandManager.literal("delay")
+					.requires(source -> source.hasPermissionLevel(4))
 					.then(CommandManager.argument("seconds", IntegerArgumentType.integer(1, 3600))
 						.executes(DelayCommand::execute)
 					)
@@ -28,10 +28,16 @@ public class DelayCommand {
 	}
 	
 	private static int execute(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		if (!DimensionGuard.requireActiveDimension(context.getSource())) {
+			return 0;
+		}
 		int seconds = IntegerArgumentType.getInteger(context, "seconds");
 		
-		ModConfig.transformDelaySeconds = seconds;
-		ModConfig.saveConfig();
+		ModConfig.setTransformDelaySeconds(seconds);
+		IslandGame game = RandomSkyBlockIsland.getIslandGame();
+		if (game != null) {
+			game.updateDelay();
+		}
 		
 		context.getSource().sendFeedback(
 			() -> Text.translatable("rsl.message.delay_set", seconds),
@@ -43,7 +49,7 @@ public class DelayCommand {
 	
 	private static int executeShow(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
 		context.getSource().sendFeedback(
-			() -> Text.translatable("rsl.message.delay_show", ModConfig.transformDelaySeconds),
+			() -> Text.translatable("rsl.message.delay_show", ModConfig.getTransformDelaySeconds()),
 			false
 		);
 		

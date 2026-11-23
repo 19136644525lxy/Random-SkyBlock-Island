@@ -54,9 +54,11 @@ public class IslandBossbar {
             return;
         }
 
-        bossbar.setName(Component.translatable("rsl.bossbar.title", secondsRemaining));
-        float progress = (float) secondsRemaining / totalSeconds;
-        bossbar.setProgress(progress);
+        int safeTotal = Math.max(1, totalSeconds);
+        int safeRemaining = Math.max(0, Math.min(secondsRemaining, safeTotal));
+        bossbar.setName(Component.translatable("rsl.bossbar.title", safeRemaining));
+        float progress = (float) safeRemaining / safeTotal;
+        bossbar.setProgress(Math.max(0.0F, Math.min(1.0F, progress)));
     }
 
     public void addPlayer(ServerPlayer player) {

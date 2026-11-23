@@ -13,8 +13,8 @@ public class StopCommand {
 	public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
 		dispatcher.register(
 			CommandManager.literal("randomskyblock")
-				.requires(source -> source.hasPermissionLevel(4))
 				.then(CommandManager.literal("stop")
+					.requires(source -> source.hasPermissionLevel(4))
 					.executes(StopCommand::execute)
 				)
 		);

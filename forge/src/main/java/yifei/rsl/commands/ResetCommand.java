@@ -19,8 +19,8 @@ public class ResetCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
             Commands.literal("randomskyblock")
-                .requires(source -> source.hasPermission(4))
                 .then(Commands.literal("reset")
+                    .requires(source -> source.hasPermission(4))
                     .executes(ResetCommand::execute)
                 )
         );
@@ -34,19 +34,21 @@ public class ResetCommand {
             return 0;
         }
 
-        // 停止游戏
-        if (game.isRunning()) {
-            game.stop();
+        if (!DimensionGuard.requireActiveDimension(context.getSource())) {
+            return 0;
         }
 
+        // 停止游戏（未运行时也会清理本地倒计时字段）
+        game.stop();
+
         // 重置运行时状态（保留区域和方块配置）
-        ModConfig.isRunning = false;
-        ModConfig.secondsRemaining = 0;
-        ModConfig.saveConfig();
+        ModConfig.setRunning(false);
+        ModConfig.setSecondsRemaining(0);
+        ModConfig.saveState();
 
         context.getSource().sendSuccess(() -> Component.translatable("rsl.message.reset_done",
                 ModConfig.getAllAreas().size(),
-                ModConfig.allowedBlocks.size()), false);
+                ModConfig.getAllowedBlocks().size()), false);
 
         return 1;
     }

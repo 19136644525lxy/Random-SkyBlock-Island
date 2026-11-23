@@ -3,20 +3,33 @@ package yifei.rsl;
 import yifei.rsl.commands.StartCommand;
 import yifei.rsl.commands.StopCommand;
 import yifei.rsl.commands.AreaCommand;
+import yifei.rsl.commands.BlocksCommand;
 import yifei.rsl.commands.DelayCommand;
+import yifei.rsl.commands.ReloadCommand;
 import yifei.rsl.commands.ResetCommand;
+import yifei.rsl.commands.StatusCommand;
+import yifei.rsl.commands.WandCommand;
 import yifei.rsl.config.ModConfig;
 import yifei.rsl.game.IslandGame;
+import yifei.rsl.item.SelectionWandItem;
+import yifei.rsl.item.WandSelectionManager;
+import yifei.rsl.network.BlockPoolNetwork;
+import yifei.rsl.network.WandNetwork;
 import net.minecraft.server.MinecraftServer;
-import net.minecraftforge.client.ConfigScreenHandler;
+import net.minecraft.world.item.Item;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +43,10 @@ import org.slf4j.LoggerFactory;
 public class RandomSkyBlockIsland {
     public static final String MOD_ID = "rsl";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final DeferredRegister<Item> ITEMS =
+            DeferredRegister.create(ForgeRegistries.ITEMS, MOD_ID);
+    public static final RegistryObject<Item> SELECTION_WAND =
+            ITEMS.register("selection_wand", () -> new SelectionWandItem(new Item.Properties().stacksTo(1)));
 
     private static IslandGame islandGame;
 
@@ -37,18 +54,21 @@ public class RandomSkyBlockIsland {
         // 注册到 FORGE 事件总线（用于服务端事件：Tick、命令注册、玩家登录、服务器停止）
         MinecraftForge.EVENT_BUS.register(this);
 
+        // 注册物品与网络
+        ITEMS.register(context.getModEventBus());
+        WandNetwork.register();
+        BlockPoolNetwork.register();
+
         // 初始化配置（保留原 JSON 配置系统，与 Fabric 版格式完全一致）
         ModConfig.loadConfig();
 
-        // 注册配置界面工厂到 Forge ConfigScreenHandler
-        // Catalogue（Forge 版 ModMenu）会通过此扩展点识别并显示"配置"按钮
-        context.registerExtensionPoint(
-                ConfigScreenHandler.ConfigScreenFactory.class,
-                () -> new ConfigScreenHandler.ConfigScreenFactory((client, parent) -> {
-                    // 委托给 Cloth Config 构建的配置界面
-                    return yifei.rsl.config.ModConfigScreen.create(parent);
-                })
-        );
+        // 注册配置界面工厂到 Forge ConfigScreenHandler。
+        // Catalogue（Forge 版 ModMenu）会通过此扩展点识别并显示"配置"按钮。
+        // Cloth Config 为可选依赖：DistExecutor 确保客户端类不会在服务端被加载。
+        DistExecutor.unsafeRunWhenOn(net.minecraftforge.api.distmarker.Dist.CLIENT,
+                () -> () -> yifei.rsl.config.ClientConfigRegistration.register(context));
+        DistExecutor.unsafeRunWhenOn(net.minecraftforge.api.distmarker.Dist.CLIENT,
+                () -> () -> yifei.rsl.client.ClientKeybinds.register(context.getModEventBus()));
     }
 
     /**
@@ -59,8 +79,12 @@ public class RandomSkyBlockIsland {
         StartCommand.register(event.getDispatcher());
         StopCommand.register(event.getDispatcher());
         AreaCommand.register(event.getDispatcher());
+        BlocksCommand.register(event.getDispatcher());
         DelayCommand.register(event.getDispatcher());
         ResetCommand.register(event.getDispatcher());
+        StatusCommand.register(event.getDispatcher());
+        ReloadCommand.register(event.getDispatcher());
+        WandCommand.register(event.getDispatcher());
     }
 
     /**
@@ -99,8 +123,11 @@ public class RandomSkyBlockIsland {
      */
     @SubscribeEvent
     public void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (islandGame != null && event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
-            islandGame.onPlayerLogout(player);
+        if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
+            WandSelectionManager.remove(player.getUUID());
+            if (islandGame != null) {
+                islandGame.onPlayerLogout(player);
+            }
         }
     }
 
@@ -111,16 +138,24 @@ public class RandomSkyBlockIsland {
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         if (islandGame != null) {
-            ModConfig.isRunning = islandGame.isRunning();
+            ModConfig.setRunning(islandGame.isRunning());
             if (islandGame.isRunning()) {
-                ModConfig.secondsRemaining = islandGame.getSecondsRemaining();
+                ModConfig.setSecondsRemaining(islandGame.getSecondsRemaining());
             } else {
-                ModConfig.secondsRemaining = 0;
+                ModConfig.setSecondsRemaining(0);
             }
-            ModConfig.saveConfig();
+            ModConfig.saveState();
             // 同步保存存档级区域配置
             ModConfig.saveSaveAreas();
         }
+    }
+
+    /**
+     * 服务器完全停止后清理静态引用，避免单机切换存档时复用旧的 MinecraftServer。
+     */
+    @SubscribeEvent
+    public void onServerStopped(ServerStoppedEvent event) {
+        islandGame = null;
     }
 
     public static IslandGame getIslandGame() {

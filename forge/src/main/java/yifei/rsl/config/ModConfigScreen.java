@@ -28,15 +28,15 @@ public class ModConfigScreen {
 
         settings.addEntry(entryBuilder.startIntField(
                 Component.translatable("rsl.config.transform_delay"),
-                ModConfig.transformDelaySeconds)
+                ModConfig.getTransformDelaySeconds())
             .setDefaultValue(180)
             .setTooltip(Component.translatable("rsl.config.transform_delay.tooltip"))
-            .setSaveConsumer(newValue -> ModConfig.transformDelaySeconds = newValue)
+            .setSaveConsumer(ModConfig::setTransformDelaySeconds)
             .build()
         );
 
         builder.setSavingRunnable(() -> {
-            ModConfig.saveConfig();
+            ModConfig.saveSettings();
             RandomSkyBlockIsland.LOGGER.info("Config saved");
         });
 

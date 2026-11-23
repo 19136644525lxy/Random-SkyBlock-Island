@@ -1,8 +1,8 @@
 package yifei.rsl.commands;
 
 import yifei.rsl.RandomSkyBlockIsland;
+import yifei.rsl.common.config.AreaSpec;
 import yifei.rsl.config.ModConfig;
-import yifei.rsl.config.TransformArea;
 import yifei.rsl.game.IslandGame;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -20,8 +20,8 @@ public class AreaCommand {
 	public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
 		dispatcher.register(
 			CommandManager.literal("randomskyblock")
-				.requires(source -> source.hasPermissionLevel(4))
 				.then(CommandManager.literal("area")
+					.requires(source -> source.hasPermissionLevel(4))
 					.then(CommandManager.literal("add")
 						.then(CommandManager.argument("name", StringArgumentType.string())
 							.then(CommandManager.argument("minX", IntegerArgumentType.integer())
@@ -62,17 +62,46 @@ public class AreaCommand {
 							.executes(AreaCommand::executeSetFromPos)
 						)
 					)
+					.then(CommandManager.literal("initial")
+						.then(CommandManager.literal("show")
+							.executes(AreaCommand::executeInitialShow)
+						)
+						.then(CommandManager.literal("pos1")
+							.executes(AreaCommand::executeInitialPos1)
+						)
+						.then(CommandManager.literal("pos2")
+							.executes(AreaCommand::executeInitialPos2)
+						)
+					)
+					.then(CommandManager.literal("resetdefault")
+						.executes(AreaCommand::executeResetDefault)
+					)
 					.then(CommandManager.literal("show")
 						.executes(AreaCommand::executeShow)
 					)
 					.then(CommandManager.literal("list")
-						.executes(AreaCommand::executeList)
+						.executes(context -> executeList(context, 1))
+						.then(CommandManager.argument("page", IntegerArgumentType.integer(1))
+							.executes(context -> executeList(context,
+								IntegerArgumentType.getInteger(context, "page")))
+						)
+					)
+				)
+				.then(CommandManager.literal("areas")
+					.requires(source -> source.hasPermissionLevel(4))
+					.executes(context -> executeAreas(context, 1))
+					.then(CommandManager.argument("page", IntegerArgumentType.integer(1))
+						.executes(context -> executeAreas(context,
+							IntegerArgumentType.getInteger(context, "page")))
 					)
 				)
 		);
 	}
 	
 	private static int executeAdd(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		if (!ensureWorld(context.getSource()) || !DimensionGuard.requireActiveDimension(context.getSource())) {
+			return 0;
+		}
 		String name = StringArgumentType.getString(context, "name");
 		int minX = IntegerArgumentType.getInteger(context, "minX");
 		int minY = IntegerArgumentType.getInteger(context, "minY");
@@ -82,23 +111,34 @@ public class AreaCommand {
 		int maxZ = IntegerArgumentType.getInteger(context, "maxZ");
 		
 		if (ModConfig.addArea(name, minX, minY, minZ, maxX, maxY, maxZ)) {
-			ModConfig.saveSaveAreas();
+			if (!ModConfig.saveSaveAreas()) {
+				context.getSource().sendError(Text.translatable("rsl.message.area_save_failed"));
+				return 0;
+			}
+			AreaSpec added = new AreaSpec(name, minX, minY, minZ, maxX, maxY, maxZ).normalized();
 			context.getSource().sendFeedback(
-				() -> Text.translatable("rsl.message.area_added", name, minX, minY, minZ, maxX, maxY, maxZ),
+				() -> Text.translatable("rsl.message.area_added", added.name,
+					added.minX, added.minY, added.minZ, added.maxX, added.maxY, added.maxZ),
 				false
 			);
 		} else {
-			context.getSource().sendError(Text.translatable("rsl.message.area_exists", name));
+			context.getSource().sendError(Text.translatable("rsl.message.area_add_failed", name));
 		}
 		
 		return 1;
 	}
 	
 	private static int executeRemove(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		if (!ensureWorld(context.getSource()) || !DimensionGuard.requireActiveDimension(context.getSource())) {
+			return 0;
+		}
 		String name = StringArgumentType.getString(context, "name");
 		
 		if (ModConfig.removeArea(name)) {
-			ModConfig.saveSaveAreas();
+			if (!ModConfig.saveSaveAreas()) {
+				context.getSource().sendError(Text.translatable("rsl.message.area_save_failed"));
+				return 0;
+			}
 			context.getSource().sendFeedback(
 				() -> Text.translatable("rsl.message.area_removed", name),
 				false
@@ -111,16 +151,16 @@ public class AreaCommand {
 	}
 
 	private static int executeRename(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		if (!ensureWorld(context.getSource()) || !DimensionGuard.requireActiveDimension(context.getSource())) {
+			return 0;
+		}
 		String oldName = StringArgumentType.getString(context, "oldName");
 		String newName = StringArgumentType.getString(context, "newName");
 		
-		boolean isDefault = ModConfig.defaultArea.name.equals(oldName);
-		
 		if (ModConfig.renameArea(oldName, newName)) {
-			if (isDefault) {
-				ModConfig.saveConfig();
-			} else {
-				ModConfig.saveSaveAreas();
+			if (!ModConfig.saveSaveAreas()) {
+				context.getSource().sendError(Text.translatable("rsl.message.area_save_failed"));
+				return 0;
 			}
 			context.getSource().sendFeedback(
 				() -> Text.translatable("rsl.message.area_renamed", oldName, newName),
@@ -134,58 +174,87 @@ public class AreaCommand {
 	}
 	
 	private static int executePos1(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		if (!ensureWorld(context.getSource()) || !DimensionGuard.requireActiveDimension(context.getSource())) {
+			return 0;
+		}
 		var vec3 = context.getSource().getPosition();
 		BlockPos pos = new BlockPos((int)vec3.x, (int)vec3.y, (int)vec3.z);
 		
-		ModConfig.defaultArea.minX = pos.getX();
-		ModConfig.defaultArea.minY = pos.getY();
-		ModConfig.defaultArea.minZ = pos.getZ();
-		ModConfig.saveConfig();
+		ModConfig.getDefaultArea().minX = pos.getX();
+		ModConfig.getDefaultArea().minY = pos.getY();
+		ModConfig.getDefaultArea().minZ = pos.getZ();
+		if (!ModConfig.saveSaveAreas()) {
+			context.getSource().sendError(Text.translatable("rsl.message.area_save_failed"));
+			return 0;
+		}
 		
 		context.getSource().sendFeedback(
 			() -> Text.translatable("rsl.message.area_pos1", pos.getX(), pos.getY(), pos.getZ()),
 			false
 		);
+		if (!ModConfig.isValidArea(ModConfig.getDefaultArea())) {
+			context.getSource().sendFeedback(() -> Text.translatable("rsl.message.area_invalid_warning"), false);
+		}
 		
 		return 1;
 	}
 
 	private static int executePos2(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		if (!ensureWorld(context.getSource()) || !DimensionGuard.requireActiveDimension(context.getSource())) {
+			return 0;
+		}
 		var vec3 = context.getSource().getPosition();
 		BlockPos pos = new BlockPos((int)vec3.x, (int)vec3.y, (int)vec3.z);
 		
-		ModConfig.defaultArea.maxX = pos.getX();
-		ModConfig.defaultArea.maxY = pos.getY();
-		ModConfig.defaultArea.maxZ = pos.getZ();
-		ModConfig.saveConfig();
+		ModConfig.getDefaultArea().maxX = pos.getX();
+		ModConfig.getDefaultArea().maxY = pos.getY();
+		ModConfig.getDefaultArea().maxZ = pos.getZ();
+		if (!ModConfig.saveSaveAreas()) {
+			context.getSource().sendError(Text.translatable("rsl.message.area_save_failed"));
+			return 0;
+		}
 		
 		context.getSource().sendFeedback(
 			() -> Text.translatable("rsl.message.area_pos2", pos.getX(), pos.getY(), pos.getZ()),
 			false
 		);
+		if (!ModConfig.isValidArea(ModConfig.getDefaultArea())) {
+			context.getSource().sendFeedback(() -> Text.translatable("rsl.message.area_invalid_warning"), false);
+		}
 		
 		return 1;
 	}
 
 	private static int executeSetFromPos(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+		if (!ensureWorld(context.getSource()) || !DimensionGuard.requireActiveDimension(context.getSource())) {
+			return 0;
+		}
 		String name = StringArgumentType.getString(context, "name");
 		
-		TransformArea area = ModConfig.defaultArea;
-		ModConfig.addArea(name, area.minX, area.minY, area.minZ, area.maxX, area.maxY, area.maxZ);
-		ModConfig.saveSaveAreas();
-		
-		context.getSource().sendFeedback(
-			() -> Text.translatable("rsl.message.area_setfrompos", name,
-				area.minX, area.minY, area.minZ,
-				area.maxX, area.maxY, area.maxZ),
-			false
-		);
+		AreaSpec area = ModConfig.getDefaultArea().normalized();
+		if (ModConfig.addArea(name, area.minX, area.minY, area.minZ, area.maxX, area.maxY, area.maxZ)) {
+			if (!ModConfig.saveSaveAreas()) {
+				context.getSource().sendError(Text.translatable("rsl.message.area_save_failed"));
+				return 0;
+			}
+			context.getSource().sendFeedback(
+				() -> Text.translatable("rsl.message.area_setfrompos", name,
+					area.minX, area.minY, area.minZ,
+					area.maxX, area.maxY, area.maxZ),
+				false
+			);
+		} else {
+			context.getSource().sendError(Text.translatable("rsl.message.area_add_failed", name));
+		}
 		
 		return 1;
 	}
 
 	private static int executeShow(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-		TransformArea area = ModConfig.defaultArea;
+		if (!ensureWorld(context.getSource())) {
+			return 0;
+		}
+		AreaSpec area = ModConfig.getDefaultArea();
 		context.getSource().sendFeedback(
 			() -> Text.translatable("rsl.message.area_show",
 				area.name,
@@ -197,23 +266,142 @@ public class AreaCommand {
 		return 1;
 	}
 
-	private static int executeList(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-		List<TransformArea> allAreas = ModConfig.getAllAreas();
+	private static int executeList(CommandContext<ServerCommandSource> context, int page)
+			throws CommandSyntaxException {
+		return executeAreas(context, page);
+	}
+
+	private static int executeAreas(CommandContext<ServerCommandSource> context, int requestedPage)
+			throws CommandSyntaxException {
+		if (!ensureWorld(context.getSource())) {
+			return 0;
+		}
+		List<AreaSpec> allAreas = ModConfig.getAllAreas();
+		if (allAreas.isEmpty()) {
+			context.getSource().sendFeedback(
+				() -> Text.translatable("rsl.message.areas_empty"),
+				false
+			);
+			return 1;
+		}
+
+		final int pageSize = 8;
+		int pages = Math.max(1, (allAreas.size() + pageSize - 1) / pageSize);
+		int page = Math.max(1, Math.min(requestedPage, pages));
+		int from = (page - 1) * pageSize;
+		int to = Math.min(allAreas.size(), from + pageSize);
+		String activeDimension = ModConfig.getActiveDimension();
+		final String dimension = activeDimension == null ? "-" : activeDimension;
+		final int shownPage = page;
 		context.getSource().sendFeedback(
-			() -> Text.translatable("rsl.message.area_list_count", allAreas.size()),
+			() -> Text.translatable("rsl.message.areas_header",
+				allAreas.size(), dimension, shownPage, pages),
 			false
 		);
-		
-		for (TransformArea area : allAreas) {
+
+		AreaSpec defaultArea = ModConfig.getDefaultArea();
+		for (int i = from; i < to; i++) {
+			AreaSpec area = allAreas.get(i);
+			boolean isDefault = defaultArea != null && defaultArea.name.equals(area.name);
+			boolean valid = ModConfig.isValidArea(area);
+			String key = !valid ? "rsl.message.areas_item_invalid"
+					: isDefault ? "rsl.message.areas_item_default"
+					: "rsl.message.areas_item_named";
 			context.getSource().sendFeedback(
-				() -> Text.translatable("rsl.message.area_list_item",
-					area.name,
+				() -> Text.translatable(key, area.name,
 					area.minX, area.minY, area.minZ,
-					area.maxX, area.maxY, area.maxZ),
+					area.maxX, area.maxY, area.maxZ,
+					area.volumeSaturated()),
 				false
 			);
 		}
-		
+		if (pages > 1) {
+			context.getSource().sendFeedback(
+				() -> Text.translatable("rsl.message.areas_page", shownPage, pages),
+				false
+			);
+		}
 		return 1;
+	}
+
+	private static int executeInitialShow(CommandContext<ServerCommandSource> context) {
+		AreaSpec area = ModConfig.getInitialDefaultArea();
+		context.getSource().sendFeedback(
+			() -> Text.translatable("rsl.message.area_initial_show",
+				area.name,
+				area.minX, area.minY, area.minZ,
+				area.maxX, area.maxY, area.maxZ),
+			false
+		);
+		return 1;
+	}
+
+	private static int executeInitialPos1(CommandContext<ServerCommandSource> context) {
+		var vec3 = context.getSource().getPosition();
+		BlockPos pos = new BlockPos((int)vec3.x, (int)vec3.y, (int)vec3.z);
+		AreaSpec area = ModConfig.getInitialDefaultArea();
+		area.minX = pos.getX();
+		area.minY = pos.getY();
+		area.minZ = pos.getZ();
+		if (!ModConfig.saveSettings()) {
+			context.getSource().sendError(Text.translatable("rsl.message.area_save_failed"));
+			return 0;
+		}
+		context.getSource().sendFeedback(
+			() -> Text.translatable("rsl.message.area_initial_pos1", pos.getX(), pos.getY(), pos.getZ()),
+			false
+		);
+		if (!ModConfig.isValidArea(area)) {
+			context.getSource().sendFeedback(() -> Text.translatable("rsl.message.area_invalid_warning"), false);
+		}
+		return 1;
+	}
+
+	private static int executeInitialPos2(CommandContext<ServerCommandSource> context) {
+		var vec3 = context.getSource().getPosition();
+		BlockPos pos = new BlockPos((int)vec3.x, (int)vec3.y, (int)vec3.z);
+		AreaSpec area = ModConfig.getInitialDefaultArea();
+		area.maxX = pos.getX();
+		area.maxY = pos.getY();
+		area.maxZ = pos.getZ();
+		if (!ModConfig.saveSettings()) {
+			context.getSource().sendError(Text.translatable("rsl.message.area_save_failed"));
+			return 0;
+		}
+		context.getSource().sendFeedback(
+			() -> Text.translatable("rsl.message.area_initial_pos2", pos.getX(), pos.getY(), pos.getZ()),
+			false
+		);
+		if (!ModConfig.isValidArea(area)) {
+			context.getSource().sendFeedback(() -> Text.translatable("rsl.message.area_invalid_warning"), false);
+		}
+		return 1;
+	}
+
+	private static int executeResetDefault(CommandContext<ServerCommandSource> context) {
+		if (!ensureWorld(context.getSource()) || !DimensionGuard.requireActiveDimension(context.getSource())) {
+			return 0;
+		}
+		if (!ModConfig.resetWorldDefaultToInitial()) {
+			context.getSource().sendError(Text.translatable("rsl.message.area_reset_default_failed"));
+			return 0;
+		}
+		AreaSpec area = ModConfig.getDefaultArea();
+		context.getSource().sendFeedback(
+			() -> Text.translatable("rsl.message.area_reset_default",
+				area.name,
+				area.minX, area.minY, area.minZ,
+				area.maxX, area.maxY, area.maxZ),
+			false
+		);
+		return 1;
+	}
+
+	private static boolean ensureWorld(ServerCommandSource source) {
+		if (!ModConfig.isWorldLoaded()) {
+			source.sendError(Text.translatable("rsl.message.world_not_initialized"));
+			return false;
+		}
+		return true;
 	}
 }

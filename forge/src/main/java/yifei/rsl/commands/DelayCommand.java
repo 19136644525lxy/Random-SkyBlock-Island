@@ -1,6 +1,8 @@
 package yifei.rsl.commands;
 
+import yifei.rsl.RandomSkyBlockIsland;
 import yifei.rsl.config.ModConfig;
+import yifei.rsl.game.IslandGame;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -20,8 +22,8 @@ public class DelayCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
             Commands.literal("randomskyblock")
-                .requires(source -> source.hasPermission(4))
                 .then(Commands.literal("delay")
+                    .requires(source -> source.hasPermission(4))
                     .then(Commands.argument("seconds", IntegerArgumentType.integer(1, 3600))
                         .executes(DelayCommand::execute)
                     )
@@ -33,10 +35,16 @@ public class DelayCommand {
     }
 
     private static int execute(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        if (!DimensionGuard.requireActiveDimension(context.getSource())) {
+            return 0;
+        }
         int seconds = IntegerArgumentType.getInteger(context, "seconds");
 
-        ModConfig.transformDelaySeconds = seconds;
-        ModConfig.saveConfig();
+        ModConfig.setTransformDelaySeconds(seconds);
+        IslandGame game = RandomSkyBlockIsland.getIslandGame();
+        if (game != null) {
+            game.updateDelay();
+        }
 
         context.getSource().sendSuccess(() -> Component.translatable("rsl.message.delay_set", seconds), false);
 
@@ -44,7 +52,7 @@ public class DelayCommand {
     }
 
     private static int executeShow(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        context.getSource().sendSuccess(() -> Component.translatable("rsl.message.delay_show", ModConfig.transformDelaySeconds), false);
+        context.getSource().sendSuccess(() -> Component.translatable("rsl.message.delay_show", ModConfig.getTransformDelaySeconds()), false);
 
         return 1;
     }

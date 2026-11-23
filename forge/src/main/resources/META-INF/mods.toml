@@ -26,13 +26,13 @@ description='''${mod_description}'''
     ordering="NONE"
     side="BOTH"
 
-# Cloth Config API 依赖（配置界面必需）
+# Cloth Config API 依赖（可选，仅配置界面需要）
 [[dependencies.${mod_id}]]
     modId="cloth_config"
-    mandatory=true
+    mandatory=false
     versionRange="[11.1.136,)"
     ordering="AFTER"
-    side="BOTH"
+    side="CLIENT"
 
 # Catalogue 依赖（可选，提供模组列表界面和配置入口）
 [[dependencies.${mod_id}]]

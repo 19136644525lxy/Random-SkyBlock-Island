@@ -6,9 +6,14 @@ plugins {
 version = project.mod_version
 group = project.maven_group
 
+base {
+    archivesName = project.archives_base_name
+}
+
 repositories {
 	maven { url "https://maven.shedaniel.me/" }
 	maven { url "https://maven.fabricmc.net/" }
+	maven { url "https://maven.terraformersmc.com/releases/" }
 }
 
 dependencies {
@@ -20,11 +25,30 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 	
-	// Cloth Config API
-	modImplementation files("libs/cloth-config-11.1.136-fabric.jar")
-	
-	// Mod Menu
-	modImplementation files("libs/[模组菜单] modmenu-7.2.2.jar")
+	// Cloth Config API（Maven，干净克隆无需 libs/）
+	modImplementation "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
+
+	// Mod Menu（Maven）
+	modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
+
+	// 共享纯逻辑层单元测试
+	testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"
+}
+
+sourceSets {
+	main {
+		java.srcDir 'common/src/main/java'
+		resources.srcDir 'common/src/main/resources'
+	}
+	test {
+		java.srcDir 'common/src/test/java'
+	}
+}
+
+test {
+	useJUnitPlatform()
+	workingDir project.projectDir
 }
 
 processResources {

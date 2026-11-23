@@ -18,8 +18,8 @@ public class StopCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
             Commands.literal("randomskyblock")
-                .requires(source -> source.hasPermission(4))
                 .then(Commands.literal("stop")
+                    .requires(source -> source.hasPermission(4))
                     .executes(StopCommand::execute)
                 )
         );
