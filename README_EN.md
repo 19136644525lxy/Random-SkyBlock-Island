@@ -262,4 +262,4 @@ The first build needs network access for Fabric/Forge and Maven dependencies. Th
 
 ## License
 
-MIT License - See [LICENSE](LICENSE)
+Apache License 2.0 - See [LICENSE](LICENSE)
