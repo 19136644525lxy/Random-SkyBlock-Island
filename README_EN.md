@@ -25,10 +25,10 @@ A Minecraft mod that randomly transforms your skyblock island blocks! Supports b
 
 ### Custom Block Pool
 - Add blocks from **any installed mod** to the global random pool via commands
-- Press `B` to open the block-pool screen: all registered blocks are drawn with the vanilla item renderer, **with no JEI/REI dependency**; the grid adapts to the window and supports paging, search by id, English name, or the name supplied by the active resource pack, click icons for multi-select, select all results, clear the selection, and submit the whole batch
+- Press `B` to open the block-pool screen (rebindable, see "Screens and Keybinds" below): all registered blocks are drawn with the vanilla item renderer, **with no JEI/REI dependency**; the grid adapts to the window and supports paging, search by id, English name, or the name supplied by the active resource pack, click icons for multi-select, select all results, clear the selection, and submit the whole batch
 - The “View current pool / Show all blocks” button switches between the full block list and the current random pool; in the current-pool view, click blocks to mark them for removal, use “Mark all” for the current results, and confirm a second time before emptying the whole pool; search and paging stay available
 - “Hide selected” enters a hide-selection mode: select blocks, then click it again to hide them from this client’s pool screen only (the mod block is not deleted and the server random pool is unchanged). “Hidden blocks” lists hidden entries and clicking one restores it; “Refresh” reloads the hidden list and requests a fresh server snapshot; the screen shows refreshing, then a success message, and reports a timeout if no snapshot arrives. Page arrows are disabled on the first/last page, and a close button sits at the top right. The hidden list is stored per save/server in `config/rsl-hidden-blocks/<context-hash>.json`. On first open after upgrading, a context with no file yet reads the old global `config/rsl-hidden-blocks.json` as its initial list and writes it into that context (the old file is kept; other contexts also inherit it on first open)
-- Press `0` to open the gameplay menu: Start, Stop, Reset, Selection wand, Area list, Block pool, delay setting, status and Close. The menu only runs the existing commands; direct commands still work, and the wand's right-click selection flow is unchanged
+- Press `0` to open the gameplay menu (rebindable, see "Screens and Keybinds" below): Start, Stop, Reset, Selection wand, Area list, Manage access, delay setting, status and Close. The menu buttons are equivalent to commands and their results appear below the panel; direct commands still work, and the wand's right-click selection flow is unchanged
 - Hovering a block icon gives a gentle lift, pulsing outline and glow; the title, search, stats and footer controls are visually separated
 - Opening and editing the screen uses a dedicated block-pool ACL and **never checks vanilla permission levels**; a level-4 operator without an ACL entry is still denied. The server checks the ACL before sending a snapshot and before accepting mutations, and closes the screen when denied
 - Access is managed by the host/server owner/console with `/randomskyblock access ...`; the server validates and saves the batch atomically, so a rejected id never leaves a half-applied config
@@ -52,6 +52,42 @@ A Minecraft mod that randomly transforms your skyblock island blocks! Supports b
 ### Localization
 - Supports English and Chinese
 - All player-facing text is localized
+
+## Screens and Keybinds
+
+All screens are opened with keybinds, which can be changed in **Options → Controls → Key Binds → Random SkyBlock Island**:
+
+| Key | Action | Screen |
+|-----|--------|--------|
+| `B` | Open block pool | Block pool screen |
+| `0` | Open gameplay menu | Gameplay menu (Random SkyBlock Island) |
+
+### Gameplay Menu (`0`)
+
+An in-game control panel; its buttons are equivalent to commands, and results appear below the panel:
+
+- **Row 1**: Start / Stop / Reset
+- **Row 2**: Selection wand (give a wand) / Area list (open the area list screen) / Manage access (open the block-pool access screen)
+- **Row 3**: delay field + Set delay / Status / Close
+- **Manage access**: shows online players, lets you multi-select them and then choose "Grant editor / Grant owner / Revoke", with a second confirmation before applying (same as `/randomskyblock access ...`)
+
+### Block Pool Screen (`B`)
+
+Used to choose the random block pool. The footer is one row on wide screens and wraps to two rows on narrow ones; buttons from left to right:
+
+- **Select all results**: select every block in the current filter; **Clear selection**: deselect everything; **Apply changes**: submit the batch
+- **View current pool**: switch between the full block list and the current random pool; in the pool view, click blocks to mark them for removal
+- **Hide selected**: enter hide-selection mode; click again to hide those blocks from this client's screen only (mod blocks stay installed and the server pool is unchanged)
+- **Hidden blocks**: list blocks hidden for this save/server and click to restore them
+- **Refresh**: reload the hidden list and request a fresh server snapshot
+- **Hidden pools**: open the hidden-pool manager to rename the current pool or copy one from another save
+- Page arrows are disabled on the first/last page, and a close button sits at the top right.
+
+Before opening, the client asks the server for a snapshot first: without permission it only shows "no block-pool permission" in the action bar instead of briefly opening the screen.
+
+### Selection Wand
+
+The selection wand is an item, not a screen keybind: obtain it from the gameplay menu or `/randomskyblock wand`, then right-click while holding it to pick two corners and right-click a third time to open the confirmation screen (see the commands section below).
 
 ## Commands
 
