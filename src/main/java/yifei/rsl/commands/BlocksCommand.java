@@ -14,6 +14,7 @@ import net.minecraft.util.Identifier;
 import yifei.rsl.common.block.BlockId;
 import yifei.rsl.common.config.BlockMutationResult;
 import yifei.rsl.config.ModConfig;
+import yifei.rsl.permission.PoolPermissions;
 
 import java.util.HashSet;
 import java.util.List;
@@ -36,7 +37,7 @@ public final class BlocksCommand {
 		dispatcher.register(
 			CommandManager.literal("randomskyblock")
 				.then(CommandManager.literal("blocks")
-					.requires(source -> source.hasPermissionLevel(ModConfig.getBlocksPermissionLevel()))
+					.requires(PoolPermissions::canUse)
 					.then(CommandManager.literal("list")
 						.executes(context -> executeList(context, 1))
 						.then(CommandManager.argument("page", IntegerArgumentType.integer(1))

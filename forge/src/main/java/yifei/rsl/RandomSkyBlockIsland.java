@@ -1,5 +1,6 @@
 package yifei.rsl;
 
+import yifei.rsl.commands.AccessCommand;
 import yifei.rsl.commands.StartCommand;
 import yifei.rsl.commands.StopCommand;
 import yifei.rsl.commands.AreaCommand;
@@ -13,7 +14,10 @@ import yifei.rsl.config.ModConfig;
 import yifei.rsl.game.IslandGame;
 import yifei.rsl.item.SelectionWandItem;
 import yifei.rsl.item.WandSelectionManager;
+import yifei.rsl.network.AccessNetwork;
 import yifei.rsl.network.BlockPoolNetwork;
+import yifei.rsl.network.GameplayActionNetwork;
+import yifei.rsl.network.GameplayNetwork;
 import yifei.rsl.network.WandNetwork;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.Item;
@@ -58,6 +62,9 @@ public class RandomSkyBlockIsland {
         ITEMS.register(context.getModEventBus());
         WandNetwork.register();
         BlockPoolNetwork.register();
+        GameplayNetwork.register();
+        GameplayActionNetwork.register();
+        AccessNetwork.register();
 
         // 初始化配置（保留原 JSON 配置系统，与 Fabric 版格式完全一致）
         ModConfig.loadConfig();
@@ -79,6 +86,7 @@ public class RandomSkyBlockIsland {
         StartCommand.register(event.getDispatcher());
         StopCommand.register(event.getDispatcher());
         AreaCommand.register(event.getDispatcher());
+        AccessCommand.register(event.getDispatcher());
         BlocksCommand.register(event.getDispatcher());
         DelayCommand.register(event.getDispatcher());
         ResetCommand.register(event.getDispatcher());

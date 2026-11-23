@@ -17,6 +17,7 @@ import yifei.rsl.common.config.BlockMutationResult;
 import yifei.rsl.common.config.BlockPoolSnapshot;
 import yifei.rsl.common.config.PoolMutationResult;
 import yifei.rsl.config.ModConfig;
+import yifei.rsl.permission.PoolPermissions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,18 +57,23 @@ public final class BlockPoolNetwork {
                 ModConfig.getAllowedBlockIds(),
                 ModConfig.getInvalidBlockIds(),
                 ModConfig.getMaxPoolSize(),
-                ModConfig.getBlocksPermissionLevel(),
-                player.hasPermissions(ModConfig.getBlocksPermissionLevel()));
+                0,
+                PoolPermissions.canUse(player));
     }
 
     private static void sendSnapshot(ServerPlayer player) {
+        if (!PoolPermissions.canUse(player)) {
+            sendResult(player, PoolMutationResult.fail(BlockMutationResult.INVALID_ID,
+                    "rsl.pool.no_permission", List.of()));
+            return;
+        }
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new SnapshotS2C(snapshot(player)));
     }
 
     private static void handleMutation(ServerPlayer player, List<String> add, List<String> remove) {
-        if (!player.hasPermissions(ModConfig.getBlocksPermissionLevel())) {
+        if (!PoolPermissions.canUse(player)) {
             sendResult(player, PoolMutationResult.fail(BlockMutationResult.INVALID_ID,
-                    "rsl.message.blocks_no_permission", List.of()));
+                    "rsl.pool.no_permission", List.of()));
             return;
         }
         if (add.size() > MAX_BATCH || remove.size() > MAX_BATCH) {

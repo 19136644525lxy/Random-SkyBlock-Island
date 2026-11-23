@@ -11,6 +11,7 @@ import net.minecraft.util.Identifier;
 import yifei.rsl.common.config.BlockPoolSnapshot;
 import yifei.rsl.common.config.PoolMutationResult;
 import yifei.rsl.config.ModConfig;
+import yifei.rsl.permission.PoolPermissions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,21 +54,27 @@ public final class BlockPoolNetwork {
                 ModConfig.getAllowedBlockIds(),
                 ModConfig.getInvalidBlockIds(),
                 ModConfig.getMaxPoolSize(),
-                ModConfig.getBlocksPermissionLevel(),
-                player.hasPermissionLevel(ModConfig.getBlocksPermissionLevel()));
+                0,
+                PoolPermissions.canUse(player));
     }
 
     public static void sendSnapshot(ServerPlayerEntity player) {
+        if (!PoolPermissions.canUse(player)) {
+            sendResult(player, PoolMutationResult.fail(
+                    yifei.rsl.common.config.BlockMutationResult.INVALID_ID,
+                    "rsl.pool.no_permission", List.of()));
+            return;
+        }
         PacketByteBuf buf = PacketByteBufs.create();
         writeSnapshot(buf, snapshot(player));
         ServerPlayNetworking.send(player, SNAPSHOT, buf);
     }
 
     private static void handleMutation(ServerPlayerEntity player, List<String> add, List<String> remove) {
-        if (!player.hasPermissionLevel(ModConfig.getBlocksPermissionLevel())) {
+        if (!PoolPermissions.canUse(player)) {
             sendResult(player, PoolMutationResult.fail(
                     yifei.rsl.common.config.BlockMutationResult.INVALID_ID,
-                    "rsl.message.blocks_no_permission", List.of()));
+                    "rsl.pool.no_permission", List.of()));
             return;
         }
         if (add.size() > MAX_BATCH || remove.size() > MAX_BATCH) {

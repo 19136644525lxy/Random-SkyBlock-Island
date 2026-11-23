@@ -26,7 +26,12 @@ A Minecraft mod that randomly transforms your skyblock island blocks! Supports b
 ### Custom Block Pool
 - Add blocks from **any installed mod** to the global random pool via commands
 - Press `B` to open the block-pool screen: all registered blocks are drawn with the vanilla item renderer, **with no JEI/REI dependency**; the grid adapts to the window and supports paging, search by id, English name, or the name supplied by the active resource pack, click icons for multi-select, select all results, clear the selection, and submit the whole batch
-- The screen is read-only or editable according to `blocksPermissionLevel`; the server validates and saves the batch atomically, so a rejected id never leaves a half-applied config
+- The “View current pool / Show all blocks” button switches between the full block list and the current random pool; in the current-pool view, click blocks to mark them for removal, use “Mark all” for the current results, and confirm a second time before emptying the whole pool; search and paging stay available
+- “Hide selected” enters a hide-selection mode: select blocks, then click it again to hide them from this client’s pool screen only (the mod block is not deleted and the server random pool is unchanged). “Hidden blocks” lists hidden entries and clicking one restores it; “Refresh” reloads the hidden list and requests a fresh server snapshot; the screen shows refreshing, then a success message, and reports a timeout if no snapshot arrives. Page arrows are disabled on the first/last page, and a close button sits at the top right. The hidden list is stored per save/server in `config/rsl-hidden-blocks/<context-hash>.json`. On first open after upgrading, a context with no file yet reads the old global `config/rsl-hidden-blocks.json` as its initial list and writes it into that context (the old file is kept; other contexts also inherit it on first open)
+- Press `0` to open the gameplay menu: Start, Stop, Reset, Selection wand, Area list, Block pool, delay setting, status and Close. The menu only runs the existing commands; direct commands still work, and the wand's right-click selection flow is unchanged
+- Hovering a block icon gives a gentle lift, pulsing outline and glow; the title, search, stats and footer controls are visually separated
+- Opening and editing the screen uses a dedicated block-pool ACL and **never checks vanilla permission levels**; a level-4 operator without an ACL entry is still denied. The server checks the ACL before sending a snapshot and before accepting mutations, and closes the screen when denied
+- Access is managed by the host/server owner/console with `/randomskyblock access ...`; the server validates and saves the batch atomically, so a rejected id never leaves a half-applied config
 - List (paginated), add, remove, clear (with confirmation), and reset to defaults
 - Blocks are stored as `namespace:path` strings; ids from temporarily removed mods are kept and become active again when the mod returns
 - Invalid/missing ids are marked by `blocks list` or the screen and never prevent the mod or server from starting; `/start` refuses to run if the pool has no usable block
@@ -98,14 +103,22 @@ A Minecraft mod that randomly transforms your skyblock island blocks! Supports b
 ### Block Pool Management
 | Command | Description | Permission |
 |---------|-------------|------------|
-| `/randomskyblock blocks list [page]` | List the pool in pages of 20, marking missing ids | 2 by default |
-| `/randomskyblock blocks add <id>` | Add a block, e.g. `minecraft:oak_log` or `mymod:my_block` | 2 by default |
-| `/randomskyblock blocks remove <id>` | Remove a block from the pool | 2 by default |
-| `/randomskyblock blocks clear` | Show a clear confirmation prompt (does not clear) | 2 by default |
-| `/randomskyblock blocks clear confirm` | Confirm clearing the pool (refused while running) | 2 by default |
-| `/randomskyblock blocks reset` | Restore the 269 built-in blocks | 2 by default |
+| `/randomskyblock blocks list [page]` | List the pool in pages of 20, marking missing ids | ACL Editor |
+| `/randomskyblock blocks add <id>` | Add a block, e.g. `minecraft:oak_log` or `mymod:my_block` | ACL Editor |
+| `/randomskyblock blocks remove <id>` | Remove a block from the pool | ACL Editor |
+| `/randomskyblock blocks clear` | Show a clear confirmation prompt (does not clear) | ACL Editor |
+| `/randomskyblock blocks clear confirm` | Confirm clearing the pool (refused while running) | ACL Editor |
+| `/randomskyblock blocks reset` | Restore the 269 built-in blocks | ACL Editor |
 
-> The block pool permission is controlled by `blocksPermissionLevel` (default `2`, i.e. operators). Set it to `0` to let regular players manage the pool; after editing the file, run `/randomskyblock reload` or restart the server. `status` is open to everyone.
+### Block-pool access
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/randomskyblock access list` | List the block-pool ACL | Owner / console / host |
+| `/randomskyblock access grant <player>` | Grant Editor (can open and edit) | Owner / console / host |
+| `/randomskyblock access grantowner <player>` | Grant Owner (can grant further access) | Owner / console / host |
+| `/randomskyblock access revoke <player>` | Revoke access (host and console always remain) | Owner / console / host |
+
+> The block-pool ACL and `/randomskyblock blocks ...` are completely independent of vanilla permission levels: a level-4 operator without an ACL entry cannot open the screen or run `blocks` commands. The console and the single-player host always act as Owner. Other game/area commands still use level 4. `status` is open to everyone and shows the caller’s pool access level.
 
 ## Config Files
 
@@ -121,7 +134,13 @@ Global settings. `defaultArea` is the **initial** default area: it is used only 
   "blocksPerTick": 8192,
   "broadcastMode": "all",
   "broadcastRadius": 64,
-  "blocksPermissionLevel": 2,
+  "poolAccess": [
+    {
+      "uuid": "00000000-0000-0000-0000-000000000000",
+      "name": "ExampleOwner",
+      "role": "OWNER"
+    }
+  ],
   "defaultArea": {
     "name": "default",
     "minX": -1,

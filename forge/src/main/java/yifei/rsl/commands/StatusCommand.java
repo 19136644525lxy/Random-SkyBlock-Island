@@ -8,6 +8,7 @@ import net.minecraft.network.chat.Component;
 import yifei.rsl.RandomSkyBlockIsland;
 import yifei.rsl.config.ModConfig;
 import yifei.rsl.game.IslandGame;
+import yifei.rsl.permission.PoolPermissions;
 
 /**
  * 只读状态查询命令（Forge 映射）。
@@ -50,7 +51,22 @@ public final class StatusCommand {
             ModConfig.getInvalidBlockIds().size()), false);
         source.sendSuccess(() -> Component.translatable("rsl.message.status.pending",
             game.getPendingFillCount(), game.getPendingBlockCount()), false);
+        source.sendSuccess(() -> Component.translatable("rsl.message.status.pool_access",
+            accessLabel(source)), false);
 
         return 1;
+    }
+
+    private static Component accessLabel(CommandSourceStack source) {
+        if (source.getPlayer() == null) {
+            return Component.translatable("rsl.message.status.pool_access_console");
+        }
+        if (PoolPermissions.canManage(source)) {
+            return Component.translatable("rsl.message.status.pool_access_manage");
+        }
+        if (PoolPermissions.canUse(source)) {
+            return Component.translatable("rsl.message.status.pool_access_edit");
+        }
+        return Component.translatable("rsl.message.status.pool_access_none");
     }
 }

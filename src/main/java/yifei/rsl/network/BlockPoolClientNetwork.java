@@ -2,7 +2,10 @@ package yifei.rsl.network;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.network.PacketByteBuf;
+import net.minecraft.text.Text;
+import yifei.rsl.client.gui.BlockPoolScreen;
 import yifei.rsl.common.config.BlockPoolSnapshot;
 import yifei.rsl.common.config.PoolMutationResult;
 
@@ -18,6 +21,7 @@ public final class BlockPoolClientNetwork {
     };
     private static Consumer<PoolMutationResult> resultHandler = result -> {
     };
+    private static boolean pendingOpen;
 
     private BlockPoolClientNetwork() {
     }
@@ -26,12 +30,34 @@ public final class BlockPoolClientNetwork {
         ClientPlayNetworking.registerGlobalReceiver(BlockPoolNetwork.SNAPSHOT,
                 (client, handler, buf, sender) -> {
                     BlockPoolSnapshot snapshot = BlockPoolNetwork.readSnapshot(buf);
-                    client.execute(() -> snapshotHandler.accept(snapshot));
+                    client.execute(() -> {
+                        if (pendingOpen) {
+                            pendingOpen = false;
+                            if (client.currentScreen == null) {
+                                // Ask the server before showing the editor: without
+                                // permission the screen must never flash into view.
+                                client.setScreen(new BlockPoolScreen());
+                                snapshotHandler.accept(snapshot);
+                                return;
+                            }
+                        }
+                        snapshotHandler.accept(snapshot);
+                    });
                 });
         ClientPlayNetworking.registerGlobalReceiver(BlockPoolNetwork.RESULT,
                 (client, handler, buf, sender) -> {
                     PoolMutationResult result = BlockPoolNetwork.readResult(buf);
-                    client.execute(() -> resultHandler.accept(result));
+                    client.execute(() -> {
+                        if (pendingOpen) {
+                            pendingOpen = false;
+                            if (client.player != null) {
+                                client.player.sendMessage(
+                                        Text.translatable("rsl.pool.no_permission"), true);
+                            }
+                            return;
+                        }
+                        resultHandler.accept(result);
+                    });
                 });
     }
 
@@ -40,6 +66,15 @@ public final class BlockPoolClientNetwork {
         } : snapshot;
         resultHandler = result == null ? resultValue -> {
         } : result;
+    }
+
+    /**
+     * Probes the server before opening the editor. A snapshot opens the screen; a
+     * denial only shows the action-bar hint and leaves the gameplay view untouched.
+     */
+    public static void requestOpenScreen() {
+        pendingOpen = true;
+        requestSnapshot();
     }
 
     public static void requestSnapshot() {

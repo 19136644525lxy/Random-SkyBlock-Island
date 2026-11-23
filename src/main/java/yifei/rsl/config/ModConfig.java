@@ -19,6 +19,8 @@ import yifei.rsl.common.config.AreasFile;
 import yifei.rsl.common.config.BlockMutationResult;
 import yifei.rsl.common.config.ConfigCodec;
 import yifei.rsl.common.config.DimensionId;
+import yifei.rsl.common.config.PoolAccess;
+import yifei.rsl.common.config.PoolAccessEntry;
 import yifei.rsl.common.config.PoolMutationResult;
 import yifei.rsl.common.config.RslSettings;
 import yifei.rsl.common.config.RslState;
@@ -30,6 +32,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Platform adapter around the shared {@link ConfigCodec}. Keeps the old static access points
@@ -83,9 +86,9 @@ public final class ModConfig {
 			refreshBlockPool();
 			loaded = true;
 			RandomSkyBlockIsland.LOGGER.info(
-					"[RSL] Loaded config: delay={}s, blocks={} (invalid={}), blocksPermission={}",
+					"[RSL] Loaded config: delay={}s, blocks={} (invalid={}), poolEditors={}",
 					settings.transformDelaySeconds, allowedBlocks.size(), invalidBlockIds.size(),
-					settings.blocksPermissionLevel);
+					settings.poolAccess == null ? 0 : settings.poolAccess.size());
 		} catch (IOException e) {
 			RandomSkyBlockIsland.LOGGER.error("[RSL] Failed to load config, using in-memory defaults", e);
 			settings = new RslSettings();
@@ -139,10 +142,6 @@ public final class ModConfig {
 
 	public static int getGamePermissionLevel() {
 		return GAME_PERMISSION_LEVEL;
-	}
-
-	public static int getBlocksPermissionLevel() {
-		return settings.blocksPermissionLevel;
 	}
 
 	public static int getMaxPoolSize() {
@@ -257,6 +256,60 @@ public final class ModConfig {
 		} catch (IOException e) {
 			RandomSkyBlockIsland.LOGGER.error("[RSL] Failed to save state", e);
 		}
+	}
+
+	// ========== 方块池访问权限 ==========
+
+	public static List<PoolAccessEntry> getPoolAccess() {
+		List<PoolAccessEntry> copy = new ArrayList<>();
+		if (settings.poolAccess != null) {
+			for (PoolAccessEntry entry : settings.poolAccess) {
+				if (entry != null) {
+					copy.add(entry.copy());
+				}
+			}
+		}
+		return copy;
+	}
+
+	/**
+	 * Grants EDITOR or OWNER access and persists it. Returns false for a no-op or a
+	 * failed save; callers should inspect the role before calling to distinguish
+	 * "already granted" from an I/O failure.
+	 */
+	public static boolean grantPoolAccess(ServerPlayerEntity target, boolean owner) {
+		if (target == null) {
+			return false;
+		}
+		List<PoolAccessEntry> previous = getPoolAccess();
+		List<PoolAccessEntry> working = getPoolAccess();
+		if (!PoolAccess.grant(working, target.getUuid(),
+				target.getGameProfile().getName(), owner)) {
+			return false;
+		}
+		settings.poolAccess = working;
+		if (!saveSettings()) {
+			settings.poolAccess = previous;
+			return false;
+		}
+		return true;
+	}
+
+	public static boolean revokePoolAccess(UUID target) {
+		if (target == null) {
+			return false;
+		}
+		List<PoolAccessEntry> previous = getPoolAccess();
+		List<PoolAccessEntry> working = getPoolAccess();
+		if (!PoolAccess.revoke(working, target)) {
+			return false;
+		}
+		settings.poolAccess = working;
+		if (!saveSettings()) {
+			settings.poolAccess = previous;
+			return false;
+		}
+		return true;
 	}
 
 	// ========== 方块池 ==========

@@ -16,7 +16,6 @@ class RslSettingsTest {
 		settings.maxAreaVolume = -5;
 		settings.blocksPerTick = 1;
 		settings.broadcastRadius = 10_000;
-		settings.blocksPermissionLevel = 99;
 		settings.broadcastMode = "NOPE";
 		settings.defaultArea = null;
 		settings.allowedBlocks = List.of("Stone", "minecraft:stone", "bad id", " ", "mod:block");
@@ -26,18 +25,21 @@ class RslSettingsTest {
 		assertEquals(1, settings.maxAreaVolume);
 		assertEquals(256, settings.blocksPerTick);
 		assertEquals(512, settings.broadcastRadius);
-		assertEquals(4, settings.blocksPermissionLevel);
 		assertEquals("all", settings.broadcastMode);
 		assertEquals("default", settings.defaultArea.name);
 		assertEquals(List.of("minecraft:stone", "bad id", "mod:block"), settings.allowedBlocks);
 	}
 
 	@Test
-	void permissionLevelZeroIsPreserved() {
+	void sanitizesPoolAccess() {
 		RslSettings settings = new RslSettings();
-		settings.blocksPermissionLevel = 0;
+		settings.poolAccess = new java.util.ArrayList<>(List.of(
+				new PoolAccessEntry("11111111-1111-1111-1111-111111111111", "Alice",
+						PoolAccessEntry.Role.EDITOR),
+				new PoolAccessEntry("bad-uuid", "Bad", PoolAccessEntry.Role.OWNER)));
 		settings.sanitize();
-		assertEquals(0, settings.blocksPermissionLevel);
+		assertEquals(1, settings.poolAccess.size());
+		assertEquals(PoolAccessEntry.Role.EDITOR, settings.poolAccess.get(0).role);
 	}
 
 	@Test
@@ -55,10 +57,16 @@ class RslSettingsTest {
 	void copyIsIndependent() {
 		RslSettings settings = new RslSettings();
 		settings.allowedBlocks = new java.util.ArrayList<>(List.of("minecraft:stone"));
+		settings.poolAccess = new java.util.ArrayList<>(List.of(
+				new PoolAccessEntry("11111111-1111-1111-1111-111111111111", "Alice",
+						PoolAccessEntry.Role.OWNER)));
 		RslSettings copy = settings.copy();
 		copy.allowedBlocks.add("mod:block");
+		copy.poolAccess.get(0).name = "Changed";
 		assertEquals(1, settings.allowedBlocks.size());
 		assertEquals(2, copy.allowedBlocks.size());
+		assertEquals("Alice", settings.poolAccess.get(0).name);
+		assertEquals("Changed", copy.poolAccess.get(0).name);
 		assertFalse(settings.defaultArea == copy.defaultArea);
 		assertTrue(settings.defaultArea.display().equals(copy.defaultArea.display()));
 	}

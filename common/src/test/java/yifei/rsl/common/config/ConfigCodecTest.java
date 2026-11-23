@@ -43,9 +43,11 @@ class ConfigCodecTest {
 	void roundTripsSettingsAndState() throws IOException {
 		ConfigCodec.LoadResult result = codec().load();
 		result.settings.transformDelaySeconds = 42;
-		result.settings.blocksPermissionLevel = 0;
 		result.settings.broadcastMode = "nearby";
 		result.settings.allowedBlocks = new ArrayList<>(List.of("minecraft:stone", "examplemod:block"));
+		result.settings.poolAccess = new ArrayList<>(List.of(
+				new PoolAccessEntry("11111111-1111-1111-1111-111111111111", "Alice",
+						PoolAccessEntry.Role.OWNER)));
 		codec().saveSettings(result.settings);
 
 		RslState state = new RslState();
@@ -55,9 +57,11 @@ class ConfigCodecTest {
 
 		ConfigCodec.LoadResult loaded = codec().load();
 		assertEquals(42, loaded.settings.transformDelaySeconds);
-		assertEquals(0, loaded.settings.blocksPermissionLevel);
 		assertEquals("nearby", loaded.settings.broadcastMode);
 		assertEquals(List.of("minecraft:stone", "examplemod:block"), loaded.settings.allowedBlocks);
+		assertEquals(1, loaded.settings.poolAccess.size());
+		assertEquals("Alice", loaded.settings.poolAccess.get(0).name);
+		assertEquals(PoolAccessEntry.Role.OWNER, loaded.settings.poolAccess.get(0).role);
 		assertTrue(loaded.state.isRunning);
 		assertEquals(77, loaded.state.secondsRemaining);
 	}

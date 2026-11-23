@@ -33,7 +33,7 @@ public final class BlocksCommand {
         dispatcher.register(
             Commands.literal("randomskyblock")
                 .then(Commands.literal("blocks")
-                    .requires(source -> source.hasPermission(ModConfig.getBlocksPermissionLevel()))
+                    .requires(yifei.rsl.permission.PoolPermissions::canUse)
                     .then(Commands.literal("list")
                         .executes(context -> executeList(context, 1))
                         .then(Commands.argument("page", IntegerArgumentType.integer(1))

@@ -26,7 +26,12 @@
 ### 自定义方块池
 - 可通过命令把**任意已安装模组**的方块加入全局随机池
 - 按 `B` 键打开方块池界面：原版物品渲染器显示所有已注册方块图标，**不依赖 JEI/REI**；网格会按窗口大小自适应铺满，支持分页、按 id、英文名或当前资源包的中文名搜索，点击图标多选，可全选结果、清空选择并一次提交
-- 界面只读/可编辑状态由 `blocksPermissionLevel` 决定；服务端会一次性校验并原子保存，失败时不会留下半套配置
+- 界面底部“查看当前池/显示全部方块”按钮可在完整方块列表与当前随机池之间切换；当前池视图可直接点击方块标记删除，支持“全选待删”，删除整个池需要再次确认；搜索、分页始终可用
+- “不想看见”进入隐藏多选：选好后再次点击即可从本客户端的方块池界面隐藏这些方块（不删除模组、不改服务端随机池）；“不可见方块池”列出隐藏项，点击恢复显示；“刷新”重读隐藏列表并重新拉取服务端快照，界面会显示刷新中，成功后显示刷新成功，超时给出提示。分页箭头在首页/末页自动禁用，右上角提供关闭按钮。隐藏列表按存档/服务器分别保存在客户端 `config/rsl-hidden-blocks/<上下文哈希>.json`；升级后首次打开某个存档/服务器时，会读取旧版 `config/rsl-hidden-blocks.json` 作为初始列表并写入该上下文（旧文件保留，其他上下文首次打开也会继承）
+- 按 `0` 打开玩法菜单：提供开始、停止、重置、选区魔杖、区域列表、方块池、延迟设置、查看状态和关闭；菜单只是执行原有命令，命令仍可直接输入，也不会改变选区魔杖的右键选点流程
+- 鼠标悬停方块图标时会有轻微上浮、脉冲高亮和光晕动画；标题、搜索、统计和底部操作区分层显示
+- 界面是否可打开、可编辑由独立的方块池 ACL 决定，**不检查原版权限等级**；4 级 OP 未被授权时同样无法打开。服务端在发送快照和接受修改前都会校验 ACL，未授权时关闭界面
+- 授权由房主/服主/控制台通过 `/randomskyblock access ...` 管理；服务端会一次性校验并原子保存，失败时不会留下半套配置
 - 支持列出、分页、添加、移除、清空（二次确认）和恢复默认
 - 方块以 `命名空间:路径` 字符串保存；模组暂时移除时该 id 会保留，恢复模组后自动重新生效
 - 无效/缺失的 id 会在 `blocks list` 中或界面内标出，不会导致模组或服务器启动失败；若池中没有任何可用方块，`/start` 会拒绝启动
@@ -98,14 +103,22 @@
 ### 方块池管理
 | 命令 | 说明 | 权限 |
 |------|------|------|
-| `/randomskyblock blocks list [page]` | 分页列出随机池（每页 20 条），标出缺失 id | 默认 2 |
-| `/randomskyblock blocks add <id>` | 添加方块，例如 `minecraft:oak_log`、`mymod:my_block` | 默认 2 |
-| `/randomskyblock blocks remove <id>` | 从随机池移除方块 | 默认 2 |
-| `/randomskyblock blocks clear` | 清空前的提示（不会直接清空） | 默认 2 |
-| `/randomskyblock blocks clear confirm` | 确认清空随机池（运行中拒绝） | 默认 2 |
-| `/randomskyblock blocks reset` | 恢复内置的 269 种方块 | 默认 2 |
+| `/randomskyblock blocks list [page]` | 分页列出随机池（每页 20 条），标出缺失 id | ACL Editor |
+| `/randomskyblock blocks add <id>` | 添加方块，例如 `minecraft:oak_log`、`mymod:my_block` | ACL Editor |
+| `/randomskyblock blocks remove <id>` | 从随机池移除方块 | ACL Editor |
+| `/randomskyblock blocks clear` | 清空前的提示（不会直接清空） | ACL Editor |
+| `/randomskyblock blocks clear confirm` | 确认清空随机池（运行中拒绝） | ACL Editor |
+| `/randomskyblock blocks reset` | 恢复内置的 269 种方块 | ACL Editor |
 
-> 方块池命令的权限由配置项 `blocksPermissionLevel` 控制，默认 `2`（OP）。设为 `0` 后普通玩家也可管理方块池；修改文件后需执行 `/randomskyblock reload` 或重启服务器生效。`status` 对所有玩家开放。
+### 方块池授权
+| 命令 | 说明 | 权限 |
+|------|------|------|
+| `/randomskyblock access list` | 列出方块池 ACL | Owner / 控制台 / 房主 |
+| `/randomskyblock access grant <player>` | 授予 Editor（可打开并编辑） | Owner / 控制台 / 房主 |
+| `/randomskyblock access grantowner <player>` | 授予 Owner（可继续授权） | Owner / 控制台 / 房主 |
+| `/randomskyblock access revoke <player>` | 撤销授权（房主与控制台始终保留） | Owner / 控制台 / 房主 |
+
+> 方块池 ACL 与 `/randomskyblock blocks ...` 完全独立于原版权限等级：即使玩家是 4 级 OP，未在 ACL 中也不能打开界面或执行 `blocks` 命令。控制台与单机房主始终拥有 Owner。其他游戏/区域命令仍使用 4 级权限。`status` 对所有玩家开放，并显示当前玩家的方块池权限级别。
 
 ## 配置文件
 
@@ -121,7 +134,13 @@
   "blocksPerTick": 8192,
   "broadcastMode": "all",
   "broadcastRadius": 64,
-  "blocksPermissionLevel": 2,
+  "poolAccess": [
+    {
+      "uuid": "00000000-0000-0000-0000-000000000000",
+      "name": "ExampleOwner",
+      "role": "OWNER"
+    }
+  ],
   "defaultArea": {
     "name": "default",
     "minX": -1,

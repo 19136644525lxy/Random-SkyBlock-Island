@@ -8,7 +8,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import org.lwjgl.glfw.GLFW;
-import yifei.rsl.client.gui.BlockPoolScreen;
+import yifei.rsl.client.gui.GameplayScreen;
 
 /**
  * Client-only key binding. Never loaded on a dedicated server.
@@ -16,6 +16,8 @@ import yifei.rsl.client.gui.BlockPoolScreen;
 public final class ClientKeybinds {
     private static final KeyMapping OPEN_POOL = new KeyMapping(
             "key.rsl.open_pool", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, "key.categories.rsl");
+    private static final KeyMapping OPEN_MENU = new KeyMapping(
+            "key.rsl.open_menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_0, "key.categories.rsl");
 
     private ClientKeybinds() {
     }
@@ -27,6 +29,7 @@ public final class ClientKeybinds {
 
     private static void onRegisterKeys(RegisterKeyMappingsEvent event) {
         event.register(OPEN_POOL);
+        event.register(OPEN_MENU);
     }
 
     private static void onClientTick(TickEvent.ClientTickEvent event) {
@@ -36,7 +39,12 @@ public final class ClientKeybinds {
         Minecraft minecraft = Minecraft.getInstance();
         while (OPEN_POOL.consumeClick()) {
             if (minecraft.player != null && minecraft.screen == null) {
-                minecraft.setScreen(new BlockPoolScreen());
+                ClientBlockPoolHandler.requestOpenScreen();
+            }
+        }
+        while (OPEN_MENU.consumeClick()) {
+            if (minecraft.player != null && minecraft.screen == null) {
+                minecraft.setScreen(new GameplayScreen());
             }
         }
     }
