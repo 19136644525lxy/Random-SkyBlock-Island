@@ -26,8 +26,8 @@ A Minecraft mod that randomly transforms your skyblock island blocks! Supports b
 ### Custom Block Pool
 - Add blocks from **any installed mod** to the global random pool via commands
 - Press `B` to open the block-pool screen (rebindable, see "Screens and Keybinds" below): all registered blocks are drawn with the vanilla item renderer, **with no JEI/REI dependency**; the grid adapts to the window and supports paging, search by id, English name, or the name supplied by the active resource pack, click icons for multi-select, select all results, clear the selection, and submit the whole batch
-- The “View current pool / Show all blocks” button switches between the full block list and the current random pool; in the current-pool view, click blocks to mark them for removal, use “Mark all” for the current results, and confirm a second time before emptying the whole pool; search and paging stay available
-- “Hide selected” enters a hide-selection mode: select blocks, then click it again to hide them from this client’s pool screen only (the mod block is not deleted and the server random pool is unchanged). “Hidden blocks” lists hidden entries and clicking one restores it; “Refresh” reloads the hidden list and requests a fresh server snapshot; the screen shows refreshing, then a success message, and reports a timeout if no snapshot arrives. Page arrows are disabled on the first/last page, and a close button sits at the top right. The hidden list is stored per save/server in `config/rsl-hidden-blocks/<context-hash>.json`. On first open after upgrading, a context with no file yet reads the old global `config/rsl-hidden-blocks.json` as its initial list and writes it into that context (the old file is kept; other contexts also inherit it on first open)
+- The “View current pool / Show all blocks�?button switches between the full block list and the current random pool; in the current-pool view, click blocks to mark them for removal, use “Mark all�?for the current results, and confirm a second time before emptying the whole pool; search and paging stay available
+- “Hide selected�?enters a hide-selection mode: select blocks, then click it again to hide them from this client’s pool screen only (the mod block is not deleted and the server random pool is unchanged). “Hidden blocks�?lists hidden entries and clicking one restores it; “Refresh�?reloads the hidden list and requests a fresh server snapshot; the screen shows refreshing, then a success message, and reports a timeout if no snapshot arrives. Page arrows are disabled on the first/last page, and a close button sits at the top right. The hidden list is stored per save/server in `config/rsl-hidden-blocks/<context-hash>.json`. On first open after upgrading, a context with no file yet reads the old global `config/rsl-hidden-blocks.json` as its initial list and writes it into that context (the old file is kept; other contexts also inherit it on first open)
 - Press `0` to open the gameplay menu (rebindable, see "Screens and Keybinds" below): Start, Stop, Reset, Selection wand, Area list, Manage access, delay setting, status and Close. The menu buttons are equivalent to commands and their results appear below the panel; direct commands still work, and the wand's right-click selection flow is unchanged
 - Hovering a block icon gives a gentle lift, pulsing outline and glow; the title, search, stats and footer controls are visually separated
 - Opening and editing the screen uses a dedicated block-pool ACL and **never checks vanilla permission levels**; a level-4 operator without an ACL entry is still denied. The server checks the ACL before sending a snapshot and before accepting mutations, and closes the screen when denied
@@ -36,6 +36,31 @@ A Minecraft mod that randomly transforms your skyblock island blocks! Supports b
 - Blocks are stored as `namespace:path` strings; ids from temporarily removed mods are kept and become active again when the mod returns
 - Invalid/missing ids are marked by `blocks list` or the screen and never prevent the mod or server from starting; `/start` refuses to run if the pool has no usable block
 - The pool is capped at 4,096 entries
+
+### Egg Mode
+- When enabled, each random transform has a chance (default 20%) to spawn a separate small egg island near a random online player (default 24-50 blocks away)
+- The egg island is filled with one block randomly chosen from the “egg pool�? no island spawns while the egg pool is empty
+- Spawn placement avoids existing areas (default minimum distance 16 blocks), requires the target cube to be all air with 8 clear blocks above, and never sits below player height
+- Default volume is 27 (3×3×3) and can be set to 1-4,096; “Other pools �?Egg�?in the block-pool screen edits the egg pool and its parameters and offers a 3D volume preview
+- Off by default; hosts/owners can toggle it with `/randomskyblock egg ...` or the gameplay menu. In multiplayer one random player is chosen
+- A successful spawn broadcasts the egg island coordinates to everyone
+
+### Reset and Area Snapshot
+- Before the first `/start`, the current blocks of every area are recorded to `<world>/rsl_snapshot.bin` (palette-compressed)
+- `/randomskyblock reset` stops the game, restores area blocks to the pre-start state from the snapshot, and clears the last egg island
+- The snapshot is recorded only before the first start and is not overwritten by later starts; entities, inventories and container contents are not restored
+- Resetting requires permission level 4 and is independent of the block-pool ACL
+
+### Container Stick and NBT Container Pool
+- The “Container stick�?button in the gameplay menu gives a container stick; Shift + right-click a chest/barrel containing items to add that container (with contents) to the random pool
+- A naming screen appears first: rename the container or leave it empty; the block-pool screen shows the custom name
+- Container entries only participate in areas with a volume of 27 or less, so large areas are not flooded with containers; their contents are restored when placed
+- Click container entries in the block-pool screen to mark them for removal
+
+### Sounds
+- Opening/closing screens, block selection, apply results, start/stop/reset, egg spawns, access changes and captures all play vanilla sound feedback
+- Adjust with `/randomskyblock sound on|off|volume <0-100>` or the “Sound�?button in the gameplay menu
+- Settings are stored globally (`soundEnabled`, `soundVolume`)
 
 ### Countdown Persistence
 - Running state and remaining time are stored in a separate state file and survive world reloads
@@ -55,7 +80,7 @@ A Minecraft mod that randomly transforms your skyblock island blocks! Supports b
 
 ## Screens and Keybinds
 
-All screens are opened with keybinds, which can be changed in **Options → Controls → Key Binds → Random SkyBlock Island**:
+All screens are opened with keybinds, which can be changed in **Options �?Controls �?Key Binds �?Random SkyBlock Island**:
 
 | Key | Action | Screen |
 |-----|--------|--------|
@@ -67,9 +92,11 @@ All screens are opened with keybinds, which can be changed in **Options → Cont
 An in-game control panel; its buttons are equivalent to commands, and results appear below the panel:
 
 - **Row 1**: Start / Stop / Reset
-- **Row 2**: Selection wand (give a wand) / Area list (open the area list screen) / Manage access (open the block-pool access screen)
+- **Row 2**: Selection wand (give a wand) / Area list (open the area list screen) / Manage access (open the block-pool access screen) / Egg (toggle egg mode) / Container stick (give a stick) / Sound (toggle sounds)
 - **Row 3**: delay field + Set delay / Status / Close
 - **Manage access**: shows online players, lets you multi-select them and then choose "Grant editor / Grant owner / Revoke", with a second confirmation before applying (same as `/randomskyblock access ...`)
+- **Egg**: toggles egg mode; detailed parameters live under “Other pools�?in the block-pool screen
+- **Container stick**: gives a container stick; **Sound**: toggles all sounds
 
 ### Block Pool Screen (`B`)
 
@@ -81,6 +108,7 @@ Used to choose the random block pool. The footer is one row on wide screens and 
 - **Hidden blocks**: list blocks hidden for this save/server and click to restore them
 - **Refresh**: reload the hidden list and request a fresh server snapshot
 - **Hidden pools**: open the hidden-pool manager to rename the current pool or copy one from another save
+- **Other pools**: open the egg-pool screen to edit the egg pool, spawn chance, volume and minimum area distance, with a 3D volume preview
 - Page arrows are disabled on the first/last page, and a close button sits at the top right.
 
 Before opening, the client asks the server for a snapshot first: without permission it only shows "no block-pool permission" in the action bar instead of briefly opening the screen.
@@ -96,7 +124,7 @@ The selection wand is an item, not a screen keybind: obtain it from the gameplay
 |---------|-------------|------------|
 | `/randomskyblock start` | Start random transformation | 4 |
 | `/randomskyblock stop` | Stop random transformation | 4 |
-| `/randomskyblock reset` | Reset game state (preserves areas and block config) | 4 |
+| `/randomskyblock reset` | Stop the game and restore areas to the pre-start state (keeps area and block config) | 4 |
 | `/randomskyblock status` | Show running state, countdown, area and block pool stats | none |
 | `/randomskyblock reload` | Reload config and areas from disk (refused while filling) | 4 |
 
@@ -136,6 +164,27 @@ The selection wand is an item, not a screen keybind: obtain it from the gameplay
 | `/randomskyblock delay <seconds>` | Set transformation interval (1-3600 seconds) | 4 |
 | `/randomskyblock delay show` | Show current interval | 4 |
 
+### Egg Mode
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/randomskyblock egg status` | Show egg toggle, chance, radius, volume, distance and egg-pool stats | ACL Owner |
+| `/randomskyblock egg on` / `off` / `toggle` | Enable / disable / toggle egg mode | 4 |
+| `/randomskyblock egg chance <1-100>` | Set the spawn chance per transform (percent) | ACL Owner |
+| `/randomskyblock egg radius <min> <max>` | Set the min/max distance from the player | ACL Owner |
+| `/randomskyblock egg volume <1-4096>` | Set the egg island volume (cube edge rounded up) | ACL Owner |
+| `/randomskyblock egg distance <1-256>` | Set the minimum distance from existing areas | ACL Owner |
+| `/randomskyblock egg pool list` | List blocks in the egg pool | ACL Owner |
+| `/randomskyblock egg pool add <id>` | Add a block to the egg pool | ACL Owner |
+| `/randomskyblock egg pool remove <id>` | Remove a block from the egg pool | ACL Owner |
+| `/randomskyblock egg pool clear` | Empty the egg pool | ACL Owner |
+
+### Sounds
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/randomskyblock sound` | Show sound toggle and volume | 4 |
+| `/randomskyblock sound on` / `off` | Enable / disable sounds | 4 |
+| `/randomskyblock sound volume <0-100>` | Set sound volume (percent) | 4 |
+
 ### Block Pool Management
 | Command | Description | Permission |
 |---------|-------------|------------|
@@ -164,12 +213,22 @@ Global settings. `defaultArea` is the **initial** default area: it is used only 
 
 ```json
 {
-  "configVersion": 2,
+  "configVersion": 3,
   "transformDelaySeconds": 180,
   "maxAreaVolume": 65536,
   "blocksPerTick": 8192,
   "broadcastMode": "all",
   "broadcastRadius": 64,
+  "soundEnabled": true,
+  "soundVolume": 0.7,
+  "eggModeEnabled": false,
+  "eggChance": 0.2,
+  "eggMinRadius": 24,
+  "eggMaxRadius": 50,
+  "eggVolume": 27,
+  "eggMinDistance": 16,
+  "eggPool": [],
+  "nbtPool": [],
   "poolAccess": [
     {
       "uuid": "00000000-0000-0000-0000-000000000000",
@@ -187,8 +246,14 @@ Global settings. `defaultArea` is the **initial** default area: it is used only 
     "maxZ": 1
   },
   "allowedBlocks": [
-    "minecraft:oak_log",
-    "minecraft:oak_planks"
+    {
+      "id": "minecraft:oak_log",
+      "state": "minecraft:oak_log"
+    },
+    {
+      "id": "minecraft:oak_planks",
+      "state": "minecraft:oak_planks"
+    }
   ]
 }
 ```
@@ -196,13 +261,18 @@ Global settings. `defaultArea` is the **initial** default area: it is used only 
 - `broadcastMode`: `all` (default, every player), `nearby` (within `broadcastRadius` of the area center), or `summary` (one combined message after all areas finish)
 - `maxAreaVolume`: maximum volume per area, default 65,536
 - `blocksPerTick`: maximum blocks filled per tick, default 8,192
+- `soundEnabled` / `soundVolume`: sound toggle and volume (0-1)
+- `eggModeEnabled` / `eggChance` / `eggMinRadius` / `eggMaxRadius` / `eggVolume` / `eggMinDistance`: egg-mode parameters
+- `eggPool`: egg-pool block ids; `nbtPool`: pool entries with container NBT (id/state/nbt)
+- `allowedBlocks`: the normal random pool, stored as entry objects since v3 (`id`, `state`, optional `nbt`); legacy string arrays migrate automatically
 
 ### Runtime State (`config/randomskyblockisland.state.json`)
 
 ```json
 {
   "isRunning": false,
-  "secondsRemaining": 0
+  "secondsRemaining": 0,
+  "eggIslandPresent": false
 }
 ```
 
@@ -212,7 +282,7 @@ Stores the save's default area, extra areas, and the currently locked dimension.
 
 ```json
 {
-  "configVersion": 2,
+  "configVersion": 3,
   "activeDimension": "minecraft:overworld",
   "defaultArea": {
     "name": "default",
@@ -236,6 +306,10 @@ Stores the save's default area, extra areas, and the currently locked dimension.
   ]
 }
 ```
+
+### Area Snapshot (`<world>/rsl_snapshot.bin`)
+
+Area blocks recorded before the first start, used to restore on reset. Binary format (palette + indices) and never edited by hand; when the file is missing, `reset` only stops the game and reports that no snapshot exists.
 
 ## Installation
 
@@ -276,6 +350,8 @@ Stores the save's default area, extra areas, and the currently locked dimension.
 - Per-area volume is limited to 65,536 by default; the pool is limited to 4,096 entries
 - Shutting down while a fill is in progress leaves that area partially filled (the fill queue is not persisted)
 - Modded blocks require the mod on both server and client; otherwise the client cannot display them
+- Container entries only participate in areas with a volume of 27 or less; snapshots do not restore entities, inventories or container contents
+- Egg islands spawn randomly near players and may appear in hard-to-spot places (coordinates are broadcast on spawn)
 
 ## Build
 

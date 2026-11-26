@@ -37,6 +37,31 @@
 - 无效/缺失的 id 会在 `blocks list` 中或界面内标出，不会导致模组或服务器启动失败；若池中没有任何可用方块，`/start` 会拒绝启动
 - 随机池上限 4096 种方块
 
+### 彩蛋模式
+- 开启后，每次随机变换有概率（默认 20%）在随机一名在线玩家附近（默认 24-50 格）生成一座独立的小彩蛋空岛
+- 彩蛋岛从「彩蛋池」中随机挑一种方块整岛生成；彩蛋池为空时不会生成
+- 生成位置自动避开现有区域（默认至少间隔 16 格），要求目标立方体全为空气、上方 8 格无遮挡，且不低于玩家高度
+- 默认体积 27（3×3×3），可设为 1-4096；方块池界面的「其他池 → 彩蛋」可编辑彩蛋池与参数，并提供 3D 体积预览
+- 默认关闭，服主/房主可用 `/randomskyblock egg ...` 或玩法菜单开关；多人时随机选一名玩家生成
+- 生成成功会向全场玩家广播彩蛋岛的坐标
+
+### 重置与区域快照
+- 首次 `/start` 之前，会把当前所有区域的方块记录到 `<存档>/rsl_snapshot.bin`（调色板压缩）
+- `/randomskyblock reset` 停止玩法后，会按快照把区域方块还原到开始前状态，并清理上次生成的彩蛋岛
+- 快照只在第一次开始前记录，重复开始不会覆盖；实体、物品栏与容器内容不参与还原
+- 重置需要 4 级权限，与方块池 ACL 独立
+
+### 收纳木棍与 NBT 容器池
+- 玩法菜单的「收纳木棍」按钮可获取收纳木棍；Shift + 右键装有物品的箱子/木桶等容器，可把该容器（含内容）加入随机池
+- 抓取后会先弹出命名界面，可给容器改名或留空；方块池界面会显示自定义名字
+- 容器条目只在体积不超过 27 的区域参与随机，避免大区域被容器塞满；放置后会还原容器内的物品
+- 可在方块池界面点击容器条目标记删除
+
+### 音效
+- 界面打开/关闭、方块选择、应用结果、开始/停止/重置、彩蛋生成、授权、抓取等操作都有原版音效反馈
+- 可用 `/randomskyblock sound on|off|volume <0-100>`，或玩法菜单里的「音效」按钮调整
+- 音效设置存于全局配置（`soundEnabled`、`soundVolume`）
+
 ### 倒计时持久化
 - 运行状态与剩余时间保存到独立的状态文件，退出存档后不丢失
 - 服务器关闭时自动保存，重新进入自动恢复
@@ -67,9 +92,10 @@
 游戏内操作面板，按钮与命令等价，操作结果显示在面板下方：
 
 - **第一排**：开始 / 停止 / 重置
-- **第二排**：选区魔杖（获取魔杖）/ 区域列表（打开区域列表界面）/ 授权权限（打开方块池授权界面）
+- **第二排**：选区魔杖（获取魔杖）/ 区域列表（打开区域列表界面）/ 授权权限（打开方块池授权界面）/ 彩蛋（开关彩蛋模式）/ 收纳木棍（获取收纳木棍）/ 音效（开关音效）
 - **第三排**：延迟输入框 + 设置延迟 / 查看状态 / 关闭
 - **授权权限**：进入在线玩家列表，可多选玩家，再选择「授权编辑 / 授权所有者 / 撤销」，执行前需要二次确认（与 `/randomskyblock access ...` 等价）
+- **彩蛋**：切换彩蛋模式开关；详细参数在方块池界面的「其他池」里调整
 
 ### 方块池界面（`B`）
 
@@ -81,6 +107,7 @@
 - **不可见方块池**：列出该存档/服务器已隐藏的方块，点击恢复显示
 - **刷新**：重读隐藏列表并重新拉取服务端快照
 - **隐藏池**：打开隐藏池管理界面，可给当前隐藏池重命名，或从其他存档的隐藏池复制一份过来
+- **其他池**：打开彩蛋池界面，可编辑彩蛋池、触发概率、体积与与区域的最小间距，并提供 3D 体积预览
 - 分页箭头在首页/末页自动禁用，右上角提供关闭按钮
 
 打开方块池前会先向服务端请求快照：没有权限时只在快捷栏提示「没有方块池权限」，不会再闪一下界面。
@@ -96,7 +123,7 @@
 |------|------|------|
 | `/randomskyblock start` | 开始随机变换 | 4 |
 | `/randomskyblock stop` | 停止随机变换 | 4 |
-| `/randomskyblock reset` | 重置游戏状态（保留区域和方块配置） | 4 |
+| `/randomskyblock reset` | 停止玩法并把区域还原到开始前状态（保留区域和方块配置） | 4 |
 | `/randomskyblock status` | 查看运行状态、倒计时、区域与方块池统计 | 无 |
 | `/randomskyblock reload` | 从磁盘重载配置与区域（填充进行中时拒绝） | 4 |
 
@@ -136,6 +163,27 @@
 | `/randomskyblock delay <seconds>` | 设置变换间隔（1-3600 秒） | 4 |
 | `/randomskyblock delay show` | 显示当前变换间隔 | 4 |
 
+### 彩蛋模式
+| 命令 | 说明 | 权限 |
+|------|------|------|
+| `/randomskyblock egg status` | 查看彩蛋开关、概率、半径、体积、间距与彩蛋池统计 | ACL Owner |
+| `/randomskyblock egg on` / `off` / `toggle` | 开启 / 关闭 / 切换彩蛋模式 | ACL Owner |
+| `/randomskyblock egg chance <1-100>` | 设置每次变换生成彩蛋的概率（百分比） | ACL Owner |
+| `/randomskyblock egg radius <min> <max>` | 设置彩蛋岛与玩家的最小/最大距离 | ACL Owner |
+| `/randomskyblock egg volume <1-4096>` | 设置彩蛋岛体积（按立方体边长向上取整） | ACL Owner |
+| `/randomskyblock egg distance <1-256>` | 设置彩蛋岛与现有区域的最小间距 | ACL Owner |
+| `/randomskyblock egg pool list` | 列出彩蛋池中的方块 | ACL Owner |
+| `/randomskyblock egg pool add <id>` | 把方块加入彩蛋池 | ACL Owner |
+| `/randomskyblock egg pool remove <id>` | 从彩蛋池移除方块 | ACL Owner |
+| `/randomskyblock egg pool clear` | 清空彩蛋池 | ACL Owner |
+
+### 音效
+| 命令 | 说明 | 权限 |
+|------|------|------|
+| `/randomskyblock sound` | 查看音效开关与音量 | 4 |
+| `/randomskyblock sound on` / `off` | 开启 / 关闭音效 | 4 |
+| `/randomskyblock sound volume <0-100>` | 设置音效音量（百分比） | 4 |
+
 ### 方块池管理
 | 命令 | 说明 | 权限 |
 |------|------|------|
@@ -164,12 +212,22 @@
 
 ```json
 {
-  "configVersion": 2,
+  "configVersion": 3,
   "transformDelaySeconds": 180,
   "maxAreaVolume": 65536,
   "blocksPerTick": 8192,
   "broadcastMode": "all",
   "broadcastRadius": 64,
+  "soundEnabled": true,
+  "soundVolume": 0.7,
+  "eggModeEnabled": false,
+  "eggChance": 0.2,
+  "eggMinRadius": 24,
+  "eggMaxRadius": 50,
+  "eggVolume": 27,
+  "eggMinDistance": 16,
+  "eggPool": [],
+  "nbtPool": [],
   "poolAccess": [
     {
       "uuid": "00000000-0000-0000-0000-000000000000",
@@ -187,8 +245,14 @@
     "maxZ": 1
   },
   "allowedBlocks": [
-    "minecraft:oak_log",
-    "minecraft:oak_planks"
+    {
+      "id": "minecraft:oak_log",
+      "state": "minecraft:oak_log"
+    },
+    {
+      "id": "minecraft:oak_planks",
+      "state": "minecraft:oak_planks"
+    }
   ]
 }
 ```
@@ -196,13 +260,18 @@
 - `broadcastMode`：`all`（默认，所有玩家）、`nearby`（区域中心 `broadcastRadius` 格内）或 `summary`（所有区域填完后合并一条消息）
 - `maxAreaVolume`：单个区域体积上限，默认 65536
 - `blocksPerTick`：每 tick 最多填充的方块数，默认 8192
+- `soundEnabled` / `soundVolume`：音效总开关与音量（0-1）
+- `eggModeEnabled` / `eggChance` / `eggMinRadius` / `eggMaxRadius` / `eggVolume` / `eggMinDistance`：彩蛋模式参数
+- `eggPool`：彩蛋池方块 id 列表；`nbtPool`：带容器 NBT 的池条目（id/state/nbt）
+- `allowedBlocks`：普通随机池，v3 起保存为条目对象（`id`、`state`、可选 `nbt`）；旧版字符串数组会自动迁移
 
 ### 运行状态（`config/randomskyblockisland.state.json`）
 
 ```json
 {
   "isRunning": false,
-  "secondsRemaining": 0
+  "secondsRemaining": 0,
+  "eggIslandPresent": false
 }
 ```
 
@@ -212,7 +281,7 @@
 
 ```json
 {
-  "configVersion": 2,
+  "configVersion": 3,
   "activeDimension": "minecraft:overworld",
   "defaultArea": {
     "name": "default",
@@ -236,6 +305,10 @@
   ]
 }
 ```
+
+### 区域快照（`<存档>/rsl_snapshot.bin`）
+
+首次开始前记录的区域方块数据，用于重置还原。二进制格式（调色板 + 索引），无需手动编辑；文件不存在时 `reset` 只停止玩法并提示没有快照。
 
 ## 安装
 
@@ -274,6 +347,8 @@
 - 同一存档同一时间只允许一个维度运行玩法；区域坐标维度无关，切换维度后按目标维度高度裁剪
 - 配置界面仅支持调整变换间隔；区域通过命令或选区魔杖管理，方块池可用 `B` 键界面或命令管理
 - 单个区域体积上限默认 65536；随机池上限 4096
+- 容器条目只在体积不超过 27 的区域参与随机，避免大区域被容器塞满；快照重置不会还原实体、物品栏与容器内容
+- 彩蛋岛位置每次随机生成，可能与玩家有较大距离（只保证不与区域重叠且附近有空气空间）
 - 填充进行中关闭服务器会留下部分区域未完成（不持久化填充队列）
 - 方块池中的模组方块要求服务端和客户端都安装对应模组，否则客户端无法正确显示
 
