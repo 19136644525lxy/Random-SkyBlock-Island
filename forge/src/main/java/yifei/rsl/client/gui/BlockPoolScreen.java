@@ -8,6 +8,7 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -17,8 +18,10 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.registries.ForgeRegistries;
 import yifei.rsl.client.BlockPoolClientNetwork;
+import yifei.rsl.client.ClientSounds;
 import yifei.rsl.common.config.BlockPoolSnapshot;
 import yifei.rsl.common.config.HiddenBlocksFile;
+import yifei.rsl.common.config.PoolEntry;
 import yifei.rsl.common.config.PoolMutationResult;
 import yifei.rsl.common.ui.PoolLayout;
 import yifei.rsl.common.ui.PoolSelection;
@@ -31,6 +34,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import net.minecraft.sounds.SoundEvents;
 
 /**
  * Searchable block-pool editor. Icons are rendered with the vanilla item
@@ -47,6 +51,9 @@ public class BlockPoolScreen extends Screen {
 
     private final Set<String> selected = new LinkedHashSet<>();
     private final Set<String> hiddenSelection = new LinkedHashSet<>();
+    /** Container-entry keys (see {@link PoolEntry#key()}) marked for removal. */
+    private final Set<String> nbtSelected = new LinkedHashSet<>();
+    private final Map<String, PoolEntry> nbtIndex = new HashMap<>();
     private final List<String> filtered = new ArrayList<>();
     private final Map<String, String> displayNames = new HashMap<>();
     private BlockPoolSnapshot snapshot;
@@ -61,6 +68,7 @@ public class BlockPoolScreen extends Screen {
     private Button hiddenPoolButton;
     private Button refreshButton;
     private Button manageButton;
+    private Button otherButton;
     private Button pagePrevButton;
     private Button pageNextButton;
     private View view = View.ALL;
@@ -75,6 +83,7 @@ public class BlockPoolScreen extends Screen {
     private long statusUntil;
     private boolean pending;
     private boolean confirmRemoveAll;
+    private boolean openedSound;
 
     public BlockPoolScreen() {
         super(Component.translatable("rsl.pool.title"));
@@ -83,6 +92,10 @@ public class BlockPoolScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!openedSound) {
+            openedSound = true;
+            ClientSounds.play(SoundEvents.CHEST_OPEN, 0.5F, 1.0F);
+        }
         layout = PoolLayout.compute(this.width, this.height);
         if (hiddenFile == null) {
             hiddenFile = HiddenBlocksFile.load(FMLPaths.CONFIGDIR.get(), currentContextKey());
@@ -132,19 +145,24 @@ public class BlockPoolScreen extends Screen {
                         layout.actionButtonWidth, height).build());
 
         hideButton = addRenderableWidget(Button.builder(hideLabel(), b -> toggleHideMode())
+                .bounds(layout.actionStartX + (layout.actionButtonWidth + gap) * 4, layout.actionY,
+                        layout.actionButtonWidth, height).build());
+        hiddenPoolButton = addRenderableWidget(Button.builder(hiddenPoolLabel(), b -> toggleHiddenView())
                 .bounds(layout.action2StartX, layout.action2Y,
                         layout.action2ButtonWidth, height).build());
-        hiddenPoolButton = addRenderableWidget(Button.builder(hiddenPoolLabel(), b -> toggleHiddenView())
-                .bounds(layout.action2StartX + layout.action2ButtonWidth + gap, layout.action2Y,
-                        layout.action2ButtonWidth, height).build());
         refreshButton = addRenderableWidget(Button.builder(refreshLabel(), b -> refresh())
-                .bounds(layout.action2StartX + (layout.action2ButtonWidth + gap) * 2, layout.action2Y,
+                .bounds(layout.action2StartX + layout.action2ButtonWidth + gap, layout.action2Y,
                         layout.action2ButtonWidth, height).build());
         manageButton = addRenderableWidget(Button.builder(Component.translatable("rsl.pool.manage"),
                         b -> openManageScreen())
-                .bounds(layout.action2StartX + (layout.action2ButtonWidth + gap) * 3, layout.action2Y,
+                .bounds(layout.action2StartX + (layout.action2ButtonWidth + gap) * 2, layout.action2Y,
                         layout.action2ButtonWidth, height).build());
         manageButton.setTooltip(Tooltip.create(Component.translatable("rsl.pool.manage_tooltip")));
+        otherButton = addRenderableWidget(Button.builder(Component.translatable("rsl.pool.other"),
+                        b -> openEggScreen())
+                .bounds(layout.action2StartX + (layout.action2ButtonWidth + gap) * 3, layout.action2Y,
+                        layout.action2ButtonWidth, height).build());
+        otherButton.setTooltip(Tooltip.create(Component.translatable("rsl.pool.other_tooltip")));
 
         page = clampPage(page);
         updateControls();
@@ -360,6 +378,10 @@ public class BlockPoolScreen extends Screen {
         Minecraft.getInstance().setScreen(new HiddenPoolScreen(this, hiddenFile));
     }
 
+    private void openEggScreen() {
+        Minecraft.getInstance().setScreen(new EggPoolScreen(this, hiddenFile));
+    }
+
     /** Reloads the hidden list after the manager copied another save's list. */
     void reloadHiddenFile() {
         if (hiddenFile == null) {
@@ -402,6 +424,9 @@ public class BlockPoolScreen extends Screen {
         if (manageButton != null) {
             manageButton.active = canEdit && !pending && !refreshPending;
         }
+        if (otherButton != null) {
+            otherButton.active = canEdit && !pending && !refreshPending;
+        }
         if (pagePrevButton != null) {
             pagePrevButton.active = page > 0;
         }
@@ -425,6 +450,23 @@ public class BlockPoolScreen extends Screen {
         return block == null ? id : block.getName().getString();
     }
 
+    /** Reads the container's CustomName from the stored NBT, or "" when unnamed. */
+    private String containerName(PoolEntry entry) {
+        if (entry == null || !entry.hasNbt()) {
+            return "";
+        }
+        CompoundTag tag = yifei.rsl.game.NbtPayload.decode(entry.nbt);
+        if (tag == null || !tag.contains("CustomName")) {
+            return "";
+        }
+        String raw = tag.getString("CustomName");
+        try {
+            return Component.Serializer.fromJson(raw).getString();
+        } catch (Exception e) {
+            return raw;
+        }
+    }
+
     private List<String> currentSourceIds() {
         if (snapshot == null) {
             return List.of();
@@ -438,6 +480,7 @@ public class BlockPoolScreen extends Screen {
 
     private void rebuildFiltered() {
         filtered.clear();
+        nbtIndex.clear();
         if (snapshot == null) {
             return;
         }
@@ -450,6 +493,24 @@ public class BlockPoolScreen extends Screen {
             String name = displayNames.getOrDefault(id, id).toLowerCase(Locale.ROOT);
             if (id.toLowerCase(Locale.ROOT).contains(search) || name.contains(search)) {
                 filtered.add(id);
+            }
+        }
+        if (view != View.HIDDEN && snapshot.nbtPool != null) {
+            for (PoolEntry entry : snapshot.nbtPool) {
+                String id = entry.normalizedId();
+                if (hiddenFile != null && hiddenFile.blocks().isHidden(id)) {
+                    continue;
+                }
+                if (!search.isEmpty()) {
+                    String name = displayNames.getOrDefault(id, id).toLowerCase(Locale.ROOT);
+                    if (!id.toLowerCase(Locale.ROOT).contains(search) && !name.contains(search)) {
+                        continue;
+                    }
+                }
+                String key = entry.key();
+                if (nbtIndex.putIfAbsent(key, entry) == null) {
+                    filtered.add(key);
+                }
             }
         }
         page = clampPage(page);
@@ -478,7 +539,7 @@ public class BlockPoolScreen extends Screen {
                     ? visibleCount(snapshot.poolIds)
                     : visibleCount(snapshot.allBlockIds);
             String key = view == View.CURRENT_POOL ? "rsl.pool.count_pool" : "rsl.pool.count";
-            text = Component.translatable(key, filtered.size(), total, selected.size());
+            text = Component.translatable(key, filtered.size(), total, selected.size() + nbtSelected.size());
         }
         if (hiddenFile != null && !hiddenFile.name().isEmpty()) {
             text.append(" · " + hiddenFile.name());
@@ -501,7 +562,11 @@ public class BlockPoolScreen extends Screen {
 
     private void selectAllFiltered() {
         if (canEditPool() && view != View.HIDDEN && !hidingMode) {
-            selected.addAll(filtered);
+            for (String id : filtered) {
+                if (!nbtIndex.containsKey(id)) {
+                    selected.add(id);
+                }
+            }
             confirmRemoveAll = false;
             updateControls();
         }
@@ -512,6 +577,7 @@ public class BlockPoolScreen extends Screen {
             hiddenSelection.clear();
         } else {
             selected.clear();
+            nbtSelected.clear();
         }
         confirmRemoveAll = false;
         updateControls();
@@ -520,6 +586,7 @@ public class BlockPoolScreen extends Screen {
     private void resetViewState() {
         selected.clear();
         hiddenSelection.clear();
+        nbtSelected.clear();
         confirmRemoveAll = false;
         page = 0;
     }
@@ -529,12 +596,20 @@ public class BlockPoolScreen extends Screen {
             return;
         }
         PoolSelection.Diff diff = PoolSelection.diff(selected, snapshot.poolIds);
-        if (diff.isEmpty()) {
+        List<String> removeNbt = new ArrayList<>();
+        if (!snapshot.nbtPool.isEmpty()) {
+            for (PoolEntry entry : snapshot.nbtPool) {
+                if (nbtSelected.contains(entry.key())) {
+                    removeNbt.add(entry.key());
+                }
+            }
+        }
+        if (diff.isEmpty() && removeNbt.isEmpty()) {
             confirmRemoveAll = false;
             setStatus(Component.translatable("rsl.pool.no_changes").getString(), 0xFFAA55);
             return;
         }
-        if (PoolSelection.removesWholePool(diff, snapshot.poolIds) && !confirmRemoveAll) {
+        if (removeNbt.isEmpty() && PoolSelection.removesWholePool(diff, snapshot.poolIds) && !confirmRemoveAll) {
             confirmRemoveAll = true;
             setStatus(Component.translatable("rsl.pool.confirm_remove_all",
                     diff.remove().size()).getString(), 0xFFAA55);
@@ -544,8 +619,8 @@ public class BlockPoolScreen extends Screen {
         pending = true;
         updateControls();
         setStatus(Component.translatable("rsl.pool.pending", diff.add().size(),
-                diff.remove().size()).getString(), 0xFFAA55);
-        BlockPoolClientNetwork.sendMutation(diff.add(), diff.remove());
+                diff.remove().size() + removeNbt.size()).getString(), 0xFFAA55);
+        BlockPoolClientNetwork.sendMutation(diff.add(), diff.remove(), removeNbt);
     }
 
     private void onResult(PoolMutationResult result) {
@@ -559,9 +634,12 @@ public class BlockPoolScreen extends Screen {
             return;
         }
         if (result.success) {
+            ClientSounds.play(SoundEvents.NOTE_BLOCK_PLING.value(), 0.6F, 1.4F);
             selected.clear();
+            nbtSelected.clear();
             setStatus(Component.translatable("rsl.pool.saved").getString(), 0x55FF55);
         } else {
+            ClientSounds.play(SoundEvents.VILLAGER_NO, 0.6F, 1.0F);
             String base = Component.translatable(result.messageKey).getString();
             if (!result.failedIds.isEmpty()) {
                 base += " " + String.join(", ", result.failedIds);
@@ -643,14 +721,16 @@ public class BlockPoolScreen extends Screen {
                     break;
                 }
                 String id = filtered.get(index);
+                PoolEntry nbtEntry = nbtIndex.get(id);
+                String displayId = nbtEntry != null ? nbtEntry.normalizedId() : id;
                 int x = layout.gridLeft + col * (layout.cell + PoolLayout.GAP);
                 int y = layout.gridTop + row * (layout.cell + PoolLayout.GAP);
                 int cellSize = layout.cell;
-                boolean isSelected = selected.contains(id);
+                boolean isSelected = nbtEntry != null ? nbtSelected.contains(id) : selected.contains(id);
                 boolean isMarked = hiddenSelection.contains(id);
                 boolean isHovered = mouseX >= x && mouseX < x + cellSize
                         && mouseY >= y && mouseY < y + cellSize;
-                boolean inPool = snapshot.poolIds.contains(id);
+                boolean inPool = nbtEntry != null || snapshot.poolIds.contains(id);
                 int fill = isMarked ? 0x66FF9900
                         : isSelected ? (inPool ? 0x55A53A3A : 0x553AA55A)
                         : 0x55202020;
@@ -661,8 +741,12 @@ public class BlockPoolScreen extends Screen {
                             (glowAlpha << 24) | 0x9FD8FF);
                 }
                 int lift = isHovered ? -1 - Math.round(pulse * 2.0f) : 0;
-                drawIcon(graphics, id, x + (cellSize - 16) / 2,
+                drawIcon(graphics, displayId, x + (cellSize - 16) / 2,
                         y + (cellSize - 16) / 2 + lift);
+                if (nbtEntry != null) {
+                    graphics.fill(x + 1, y + 1, x + 5, y + 5, 0xFFE8B14C);
+                    graphics.renderOutline(x, y, cellSize, cellSize, 0xFFB07A2E);
+                }
                 if (isMarked || isSelected || isHovered) {
                     int border = isMarked ? 0xFFFFAA00
                             : isSelected ? (inPool ? 0xFFFF6666 : 0xFF66FF66)
@@ -683,10 +767,22 @@ public class BlockPoolScreen extends Screen {
             String tooltipKey = view == View.HIDDEN
                     ? "rsl.pool.hidden_tooltip"
                     : hidingMode ? "rsl.pool.hide_tooltip" : "rsl.pool.tooltip";
-            graphics.renderComponentTooltip(this.font,
-                    List.of(Component.literal(displayNames.getOrDefault(hoveredId, hoveredId)),
-                            Component.literal(hoveredId), Component.translatable(tooltipKey)),
-                    hoveredX, hoveredY);
+            PoolEntry hoveredEntry = nbtIndex.get(hoveredId);
+            List<Component> lines = new ArrayList<>();
+            String shownId = hoveredEntry != null ? hoveredEntry.normalizedId() : hoveredId;
+            lines.add(Component.literal(displayNames.getOrDefault(shownId, shownId)));
+            if (hoveredEntry != null) {
+                String containerName = containerName(hoveredEntry);
+                lines.add(Component.literal(shownId));
+                if (!containerName.isEmpty()) {
+                    lines.add(Component.translatable("rsl.pool.nbt_name", containerName));
+                }
+                lines.add(Component.translatable("rsl.pool.nbt_tooltip"));
+            } else {
+                lines.add(Component.literal(hoveredId));
+            }
+            lines.add(Component.translatable(tooltipKey));
+            graphics.renderComponentTooltip(this.font, lines, hoveredX, hoveredY);
         }
     }
 
@@ -718,7 +814,19 @@ public class BlockPoolScreen extends Screen {
                     && col >= 0 && col < layout.columns && row >= 0 && row < layout.rows) {
                 int index = page * layout.pageSize + row * layout.columns + col;
                 if (index < filtered.size()) {
+                    ClientSounds.play(SoundEvents.NOTE_BLOCK_HAT.value(), 0.25F, 1.4F);
                     String id = filtered.get(index);
+                    if (nbtIndex.containsKey(id)) {
+                        if (canEditPool() && !pending) {
+                            if (!nbtSelected.remove(id)) {
+                                nbtSelected.add(id);
+                            }
+                            confirmRemoveAll = false;
+                            updateControls();
+                            return true;
+                        }
+                        return true;
+                    }
                     if (view == View.HIDDEN) {
                         if (canEditPool() && !pending) {
                             unhide(id);
@@ -759,6 +867,9 @@ public class BlockPoolScreen extends Screen {
 
     @Override
     public void onClose() {
+        if (openedSound) {
+            ClientSounds.play(SoundEvents.CHEST_CLOSE, 0.5F, 1.0F);
+        }
         BlockPoolClientNetwork.setHandlers(null, null);
         super.onClose();
     }

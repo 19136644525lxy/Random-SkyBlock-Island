@@ -6,9 +6,9 @@ package yifei.rsl.common.ui;
  * <p>The grid uses the available width and height instead of a fixed
  * 12x5 rectangle. Pages are used rather than a scroll row so every page fills
  * the screen and the page indicator stays meaningful. On wide screens the
- * eight block-pool actions share a single row so the footer stays short and
+ * nine block-pool actions share a single row so the footer stays short and
  * the grid keeps more room; very narrow windows fall back to two rows because
- * eight buttons would not fit.</p>
+ * nine buttons would not fit.</p>
  */
 public final class PoolLayout {
     public static final int PADDING = 12;
@@ -132,8 +132,8 @@ public final class PoolLayout {
         int pagePrevX = Math.max(PADDING, pageLabelX - 86);
         int pageNextX = Math.min(w - PADDING - PAGE_BUTTON_WIDTH, pageLabelX + 62);
 
-        // Wide screens fit all eight actions in one centered row. Narrow
-        // windows keep two rows because eight 56px buttons would not fit.
+        // Wide screens fit all nine actions in one centered row. Narrow
+        // windows keep two rows because nine 56px buttons would not fit.
         int actionButtonWidth;
         int actionsWidth;
         int action2ButtonWidth;
@@ -142,22 +142,22 @@ public final class PoolLayout {
         int action2StartX;
         if (twoRows) {
             actionButtonWidth = Math.min(110,
-                    Math.max(56, (w - PADDING * 2 - ACTION_GAP * 3) / 4));
-            actionsWidth = actionButtonWidth * 4 + ACTION_GAP * 3;
+                    Math.max(40, (w - PADDING * 2 - ACTION_GAP * 4) / 5));
+            actionsWidth = actionButtonWidth * 5 + ACTION_GAP * 4;
             action2ButtonWidth = Math.min(110,
-                    Math.max(56, (w - PADDING * 2 - ACTION_GAP * 3) / 4));
+                    Math.max(40, (w - PADDING * 2 - ACTION_GAP * 3) / 4));
             actions2Width = action2ButtonWidth * 4 + ACTION_GAP * 3;
             actionStartX = Math.max(PADDING, (w - actionsWidth) / 2);
             action2StartX = Math.max(PADDING, (w - actions2Width) / 2);
         } else {
             actionButtonWidth = Math.min(110,
-                    Math.max(56, (w - PADDING * 2 - ACTION_GAP * 7) / 8));
-            actionsWidth = actionButtonWidth * 8 + ACTION_GAP * 7;
+                    Math.max(56, (w - PADDING * 2 - ACTION_GAP * 8) / 9));
+            actionsWidth = actionButtonWidth * 9 + ACTION_GAP * 8;
             action2ButtonWidth = actionButtonWidth;
             actions2Width = actionsWidth;
             actionStartX = Math.max(PADDING, (w - actionsWidth) / 2);
-            // The secondary actions are slots 5-8 of the same single row.
-            action2StartX = actionStartX + (actionButtonWidth + ACTION_GAP) * 4;
+            // The secondary actions are slots 6-9 of the same single row.
+            action2StartX = actionStartX + (actionButtonWidth + ACTION_GAP) * 5;
         }
         int closeX = Math.max(PADDING, w - PADDING - CLOSE_SIZE);
         int closeY = CLOSE_Y;

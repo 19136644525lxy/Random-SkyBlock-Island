@@ -1,5 +1,7 @@
 package yifei.rsl.client.gui;
 
+import yifei.rsl.client.ClientSounds;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -7,6 +9,8 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import yifei.rsl.client.ClientCaptureStickNetwork;
+import yifei.rsl.client.ClientEggHandler;
 import yifei.rsl.client.ClientGameplayActionHandler;
 import yifei.rsl.client.ClientGameplayHandler;
 import yifei.rsl.config.ModConfig;
@@ -20,6 +24,7 @@ import java.util.List;
  * command, and the captured feedback is rendered inside this panel.
  */
 public class GameplayScreen extends Screen {
+    private boolean openedSound;
     private static final int PANEL_W = 460;
     private static final int PANEL_H = 320;
     private static final int BUTTON_W = 132;
@@ -30,6 +35,10 @@ public class GameplayScreen extends Screen {
     private static final int RESULT_MAX_LINES = 10;
 
     private EditBox delayField;
+    private Button eggButton;
+    private Button soundButton;
+    private boolean soundEnabled = true;
+    private boolean eggEnabled;
     private Component statusText = Component.translatable("rsl.menu.status_hint");
     private List<Component> resultLines = List.of();
     private int panelX;
@@ -55,6 +64,10 @@ public class GameplayScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!openedSound) {
+            openedSound = true;
+            ClientSounds.play(SoundEvents.BOOK_PAGE_TURN, 0.4F, 1.0F);
+        }
         this.panelWidth = Math.min(PANEL_W, this.width - 16);
         this.panelHeight = Math.min(PANEL_H, this.height - 16);
         this.panelX = (this.width - this.panelWidth) / 2;
@@ -68,21 +81,31 @@ public class GameplayScreen extends Screen {
         this.row3 = this.panelY + 164;
 
         this.addRenderableWidget(primary("rsl.menu.start", ChatFormatting.GREEN,
-                startX, row1, () -> sendAction(GameplayActionNetwork.ACTION_START)));
+                startX, row1, buttonWidth, () -> sendAction(GameplayActionNetwork.ACTION_START)));
         this.addRenderableWidget(primary("rsl.menu.stop", ChatFormatting.YELLOW,
-                startX + buttonWidth + GAP, row1, () -> sendAction(GameplayActionNetwork.ACTION_STOP)));
+                startX + buttonWidth + GAP, row1, buttonWidth, () -> sendAction(GameplayActionNetwork.ACTION_STOP)));
         this.addRenderableWidget(primary("rsl.menu.reset", ChatFormatting.RED,
-                startX + (buttonWidth + GAP) * 2, row1, () -> sendAction(GameplayActionNetwork.ACTION_RESET)));
+                startX + (buttonWidth + GAP) * 2, row1, buttonWidth, () -> sendAction(GameplayActionNetwork.ACTION_RESET)));
 
-        int row2Width = this.buttonWidth * 3 + GAP * 2;
+        int row2ButtonWidth = Math.max(56, (inner - GAP * 5) / 6);
+        int row2Width = row2ButtonWidth * 6 + GAP * 5;
         int row2StartX = this.panelX + (this.panelWidth - row2Width) / 2;
+        this.soundEnabled = ModConfig.isSoundEnabled();
         this.addRenderableWidget(primary("rsl.menu.wand", ChatFormatting.AQUA,
-                row2StartX, row2, () -> sendAction(GameplayActionNetwork.ACTION_WAND)));
+                row2StartX, row2, row2ButtonWidth, () -> sendAction(GameplayActionNetwork.ACTION_WAND)));
         this.addRenderableWidget(primary("rsl.menu.areas", ChatFormatting.WHITE,
-                row2StartX + buttonWidth + GAP, row2, () -> sendAction(GameplayActionNetwork.ACTION_AREAS)));
+                row2StartX + row2ButtonWidth + GAP, row2, row2ButtonWidth,
+                () -> sendAction(GameplayActionNetwork.ACTION_AREAS)));
         this.addRenderableWidget(primary("rsl.menu.access", ChatFormatting.GOLD,
-                row2StartX + (buttonWidth + GAP) * 2, row2,
+                row2StartX + (row2ButtonWidth + GAP) * 2, row2, row2ButtonWidth,
                 () -> this.minecraft.setScreen(new PoolAccessScreen())));
+        this.eggButton = this.addRenderableWidget(Button.builder(this.eggLabel(), button -> ClientEggHandler.toggle())
+                .bounds(row2StartX + (row2ButtonWidth + GAP) * 3, row2, row2ButtonWidth, BUTTON_H).build());
+        this.addRenderableWidget(primary("rsl.menu.stick", ChatFormatting.GOLD,
+                row2StartX + (row2ButtonWidth + GAP) * 4, row2, row2ButtonWidth,
+                ClientCaptureStickNetwork::request));
+        this.soundButton = this.addRenderableWidget(Button.builder(this.soundLabel(), button -> this.toggleSound())
+                .bounds(row2StartX + (row2ButtonWidth + GAP) * 5, row2, row2ButtonWidth, BUTTON_H).build());
 
         this.delayWidth = Math.min(70, Math.max(48, inner / 6));
         this.setDelayWidth = Math.min(90, Math.max(64, inner / 4));
@@ -120,11 +143,43 @@ public class GameplayScreen extends Screen {
         ClientGameplayActionHandler.setHandler(lines -> this.resultLines = lines);
         this.resultLines = ClientGameplayActionHandler.getLastLines();
         ClientGameplayActionHandler.request(GameplayActionNetwork.ACTION_STATUS, 0);
+        ClientEggHandler.setHandlers(this::onEggSnapshot, this::onEggResult);
+        ClientEggHandler.request();
     }
 
-    private Button primary(String key, ChatFormatting color, int x, int y, Runnable action) {
+    private Component eggLabel() {
+        return Component.translatable(this.eggEnabled ? "rsl.menu.egg_on" : "rsl.menu.egg_off")
+                .withStyle(this.eggEnabled ? ChatFormatting.GOLD : ChatFormatting.GRAY);
+    }
+
+    private void onEggSnapshot(ClientEggHandler.Snapshot snapshot) {
+        this.eggEnabled = snapshot.enabled();
+        if (this.eggButton != null) {
+            this.eggButton.setMessage(this.eggLabel());
+        }
+    }
+
+    private void onEggResult(ClientEggHandler.Result result) {
+        this.statusText = Component.translatable(result.messageKey())
+                .withStyle(result.success() ? ChatFormatting.GREEN : ChatFormatting.RED);
+    }
+
+    private Button primary(String key, ChatFormatting color, int x, int y, int width, Runnable action) {
         return Button.builder(Component.translatable(key).withStyle(color), button -> action.run())
-                .bounds(x, y, buttonWidth, BUTTON_H).build();
+                .bounds(x, y, width, BUTTON_H).build();
+    }
+
+    private Component soundLabel() {
+        return Component.translatable(soundEnabled ? "rsl.menu.sound_on" : "rsl.menu.sound_off")
+                .withStyle(soundEnabled ? ChatFormatting.GOLD : ChatFormatting.GRAY);
+    }
+
+    private void toggleSound() {
+        this.soundEnabled = !this.soundEnabled;
+        ModConfig.setSoundEnabled(this.soundEnabled);
+        if (this.soundButton != null) {
+            this.soundButton.setMessage(this.soundLabel());
+        }
     }
 
     private void sendAction(String action) {
@@ -148,8 +203,10 @@ public class GameplayScreen extends Screen {
 
     @Override
     public void onClose() {
+        ClientSounds.play(SoundEvents.BOOK_PAGE_TURN, 0.4F, 0.85F);
         ClientGameplayHandler.setHandler(null);
         ClientGameplayActionHandler.setHandler(null);
+        ClientEggHandler.setHandlers(null, null);
         super.onClose();
     }
 

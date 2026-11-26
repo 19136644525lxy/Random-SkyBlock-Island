@@ -1,5 +1,8 @@
 package yifei.rsl.commands;
 
+import yifei.rsl.game.SoundFx;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.server.network.ServerPlayerEntity;
 import yifei.rsl.RandomSkyBlockIsland;
 import yifei.rsl.config.ModConfig;
 import yifei.rsl.game.IslandGame;
@@ -56,6 +59,10 @@ public class StartCommand {
 			return 0;
 		}
 		game.getBossbar().addAllPlayers(context.getSource().getServer().getPlayerManager().getPlayerList());
+		ServerPlayerEntity starter = context.getSource().getPlayer();
+		if (starter != null) {
+			SoundFx.play(starter, SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), 0.7F, 1.2F);
+		}
 		
 		return 1;
 	}

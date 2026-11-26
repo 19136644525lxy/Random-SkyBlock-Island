@@ -1,6 +1,7 @@
 package yifei.rsl;
 
 import yifei.rsl.commands.AccessCommand;
+import yifei.rsl.commands.EggCommand;
 import yifei.rsl.commands.StartCommand;
 import yifei.rsl.commands.StopCommand;
 import yifei.rsl.commands.AreaCommand;
@@ -10,12 +11,15 @@ import yifei.rsl.commands.ReloadCommand;
 import yifei.rsl.commands.ResetCommand;
 import yifei.rsl.commands.StatusCommand;
 import yifei.rsl.commands.WandCommand;
+import yifei.rsl.commands.SoundCommand;
 import yifei.rsl.config.ModConfig;
 import yifei.rsl.game.IslandGame;
 import yifei.rsl.item.SelectionWandItem;
 import yifei.rsl.item.WandSelectionManager;
 import yifei.rsl.network.AccessNetwork;
 import yifei.rsl.network.BlockPoolNetwork;
+import yifei.rsl.network.CaptureStickNetwork;
+import yifei.rsl.network.EggNetwork;
 import yifei.rsl.network.GameplayActionNetwork;
 import yifei.rsl.network.GameplayNetwork;
 import yifei.rsl.network.WandNetwork;
@@ -36,6 +40,7 @@ public class RandomSkyBlockIsland implements ModInitializer {
 	public static final String MOD_ID = "rsl";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 	public static final Item SELECTION_WAND = new SelectionWandItem(new Item.Settings().maxCount(1));
+	public static final Item CAPTURE_STICK = new yifei.rsl.item.CaptureStickItem(new Item.Settings().maxCount(1));
 	
 	private static IslandGame islandGame;
 	
@@ -44,11 +49,15 @@ public class RandomSkyBlockIsland implements ModInitializer {
 		LOGGER.info("Random SkyBlock Island mod initialized!");
 		
 		Registry.register(Registries.ITEM, new Identifier(MOD_ID, "selection_wand"), SELECTION_WAND);
+		Registry.register(Registries.ITEM, new Identifier(MOD_ID, "capture_stick"), CAPTURE_STICK);
+		yifei.rsl.item.CaptureStickHandler.register();
 		WandNetwork.registerServer();
 		BlockPoolNetwork.registerServer();
 		GameplayNetwork.registerServer();
 		GameplayActionNetwork.registerServer();
 		AccessNetwork.registerServer();
+		EggNetwork.registerServer();
+		CaptureStickNetwork.registerServer();
 		
 		ModConfig.loadConfig();
 		
@@ -63,6 +72,8 @@ public class RandomSkyBlockIsland implements ModInitializer {
 			StatusCommand.register(dispatcher);
 			ReloadCommand.register(dispatcher);
 			WandCommand.register(dispatcher);
+			EggCommand.register(dispatcher);
+			SoundCommand.register(dispatcher);
 		});
 		
 		ServerTickEvents.END_SERVER_TICK.register(this::onServerTick);

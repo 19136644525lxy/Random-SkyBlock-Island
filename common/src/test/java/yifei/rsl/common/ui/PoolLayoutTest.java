@@ -94,20 +94,20 @@ class PoolLayoutTest {
     }
 
     @Test
-    void eightActionButtonsFitInsidePadding() {
+    void nineActionButtonsFitInsidePadding() {
         int[][] sizes = {{320, 240}, {640, 360}, {854, 480}, {1280, 720}, {1920, 1080}};
         for (int[] size : sizes) {
             PoolLayout layout = PoolLayout.compute(size[0], size[1]);
             String name = size[0] + "x" + size[1];
             if (layout.twoFooterRows) {
-                int firstRow = layout.actionButtonWidth * 4 + PoolLayout.ACTION_GAP * 3;
+                int firstRow = layout.actionButtonWidth * 5 + PoolLayout.ACTION_GAP * 4;
                 int secondRow = layout.action2ButtonWidth * 4 + PoolLayout.ACTION_GAP * 3;
                 assertTrue(firstRow <= size[0] - PoolLayout.PADDING * 2,
                         "first actions " + name);
                 assertTrue(secondRow <= size[0] - PoolLayout.PADDING * 2,
                         "second actions " + name);
             } else {
-                int singleRow = layout.actionButtonWidth * 8 + PoolLayout.ACTION_GAP * 7;
+                int singleRow = layout.actionButtonWidth * 9 + PoolLayout.ACTION_GAP * 8;
                 assertTrue(singleRow <= size[0] - PoolLayout.PADDING * 2,
                         "single action row " + name);
                 assertEquals(layout.actionButtonWidth, layout.action2ButtonWidth,
@@ -118,8 +118,8 @@ class PoolLayoutTest {
                 assertTrue(lastRight <= size[0] - PoolLayout.PADDING,
                         "last action right " + name);
             }
-            assertTrue(layout.actionButtonWidth >= 56, "button width " + name);
-            assertTrue(layout.action2ButtonWidth >= 56, "button2 width " + name);
+            assertTrue(layout.actionButtonWidth >= 40, "button width " + name);
+            assertTrue(layout.action2ButtonWidth >= 40, "button2 width " + name);
         }
     }
 
@@ -131,11 +131,11 @@ class PoolLayoutTest {
             String name = size[0] + "x" + size[1];
             assertFalse(layout.twoFooterRows, "single row " + name);
             assertEquals(layout.actionY, layout.action2Y, "shared row " + name);
-            assertEquals(layout.actionStartX + (layout.actionButtonWidth + PoolLayout.ACTION_GAP) * 4,
+            assertEquals(layout.actionStartX + (layout.actionButtonWidth + PoolLayout.ACTION_GAP) * 5,
                     layout.action2StartX, "secondary slot " + name);
             assertTrue(layout.actionStartX >= PoolLayout.PADDING, "start padding " + name);
-            assertTrue(layout.actionStartX + layout.actionButtonWidth * 8
-                            + PoolLayout.ACTION_GAP * 7 <= size[0] - PoolLayout.PADDING,
+            assertTrue(layout.actionStartX + layout.actionButtonWidth * 9
+                            + PoolLayout.ACTION_GAP * 8 <= size[0] - PoolLayout.PADDING,
                     "row inside padding " + name);
             assertTrue(layout.gridTop + layout.gridHeight <= layout.actionY,
                     "grid above footer " + name);

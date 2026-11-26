@@ -1,5 +1,7 @@
 package yifei.rsl.client.gui;
 
+import yifei.rsl.client.ClientSounds;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -9,6 +11,8 @@ import net.minecraft.util.Formatting;
 import yifei.rsl.client.GameplayActionClientNetwork;
 import yifei.rsl.client.GameplayClientNetwork;
 import yifei.rsl.config.ModConfig;
+import yifei.rsl.network.CaptureStickClientNetwork;
+import yifei.rsl.network.EggClientNetwork;
 import yifei.rsl.network.GameplayActionNetwork;
 
 import java.util.List;
@@ -19,6 +23,7 @@ import java.util.List;
  * command, and the captured feedback is rendered inside this panel.
  */
 public class GameplayScreen extends Screen {
+    private boolean openedSound;
     private static final int PANEL_W = 460;
     private static final int PANEL_H = 320;
     private static final int BUTTON_W = 132;
@@ -29,6 +34,10 @@ public class GameplayScreen extends Screen {
     private static final int RESULT_MAX_LINES = 10;
 
     private TextFieldWidget delayField;
+    private ButtonWidget eggButton;
+    private ButtonWidget soundButton;
+    private boolean soundEnabled = true;
+    private boolean eggEnabled;
     private Text statusText = Text.translatable("rsl.menu.status_hint");
     private List<Text> resultLines = List.of();
     private int panelX;
@@ -54,6 +63,10 @@ public class GameplayScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!openedSound) {
+            openedSound = true;
+            ClientSounds.play(SoundEvents.ITEM_BOOK_PAGE_TURN, 0.4F, 1.0F);
+        }
         this.panelWidth = Math.min(PANEL_W, this.width - 16);
         this.panelHeight = Math.min(PANEL_H, this.height - 16);
         this.panelX = (this.width - this.panelWidth) / 2;
@@ -67,21 +80,33 @@ public class GameplayScreen extends Screen {
         this.row3 = this.panelY + 164;
 
         this.addDrawableChild(primary("rsl.menu.start", Formatting.GREEN,
-                startX, row1, () -> sendAction(GameplayActionNetwork.ACTION_START)));
+                startX, row1, buttonWidth, () -> sendAction(GameplayActionNetwork.ACTION_START)));
         this.addDrawableChild(primary("rsl.menu.stop", Formatting.YELLOW,
-                startX + buttonWidth + GAP, row1, () -> sendAction(GameplayActionNetwork.ACTION_STOP)));
+                startX + buttonWidth + GAP, row1, buttonWidth, () -> sendAction(GameplayActionNetwork.ACTION_STOP)));
         this.addDrawableChild(primary("rsl.menu.reset", Formatting.RED,
-                startX + (buttonWidth + GAP) * 2, row1, () -> sendAction(GameplayActionNetwork.ACTION_RESET)));
+                startX + (buttonWidth + GAP) * 2, row1, buttonWidth, () -> sendAction(GameplayActionNetwork.ACTION_RESET)));
 
-        int row2Width = this.buttonWidth * 3 + GAP * 2;
+        int row2ButtonWidth = Math.max(56, (inner - GAP * 5) / 6);
+        int row2Width = row2ButtonWidth * 6 + GAP * 5;
         int row2StartX = this.panelX + (this.panelWidth - row2Width) / 2;
+        this.soundEnabled = ModConfig.isSoundEnabled();
         this.addDrawableChild(primary("rsl.menu.wand", Formatting.AQUA,
-                row2StartX, row2, () -> sendAction(GameplayActionNetwork.ACTION_WAND)));
+                row2StartX, row2, row2ButtonWidth, () -> sendAction(GameplayActionNetwork.ACTION_WAND)));
         this.addDrawableChild(primary("rsl.menu.areas", Formatting.WHITE,
-                row2StartX + buttonWidth + GAP, row2, () -> sendAction(GameplayActionNetwork.ACTION_AREAS)));
+                row2StartX + row2ButtonWidth + GAP, row2, row2ButtonWidth,
+                () -> sendAction(GameplayActionNetwork.ACTION_AREAS)));
         this.addDrawableChild(primary("rsl.menu.access", Formatting.LIGHT_PURPLE,
-                row2StartX + (buttonWidth + GAP) * 2, row2,
+                row2StartX + (row2ButtonWidth + GAP) * 2, row2, row2ButtonWidth,
                 () -> this.client.setScreen(new PoolAccessScreen())));
+        this.eggButton = ButtonWidget.builder(this.eggLabel(), button -> EggClientNetwork.toggle())
+                .dimensions(row2StartX + (row2ButtonWidth + GAP) * 3, row2, row2ButtonWidth, BUTTON_H).build();
+        this.addDrawableChild(this.eggButton);
+        this.addDrawableChild(primary("rsl.menu.stick", Formatting.GOLD,
+                row2StartX + (row2ButtonWidth + GAP) * 4, row2, row2ButtonWidth,
+                CaptureStickClientNetwork::request));
+        this.soundButton = ButtonWidget.builder(this.soundLabel(), button -> this.toggleSound())
+                .dimensions(row2StartX + (row2ButtonWidth + GAP) * 5, row2, row2ButtonWidth, BUTTON_H).build();
+        this.addDrawableChild(this.soundButton);
 
         this.delayWidth = Math.min(70, Math.max(48, inner / 6));
         this.setDelayWidth = Math.min(90, Math.max(64, inner / 4));
@@ -119,11 +144,43 @@ public class GameplayScreen extends Screen {
         GameplayActionClientNetwork.setHandler(lines -> this.resultLines = lines);
         this.resultLines = GameplayActionClientNetwork.getLastLines();
         GameplayActionClientNetwork.request(GameplayActionNetwork.ACTION_STATUS, 0);
+        EggClientNetwork.setHandlers(this::onEggSnapshot, this::onEggResult);
+        EggClientNetwork.request();
     }
 
-    private ButtonWidget primary(String key, Formatting color, int x, int y, Runnable action) {
+    private Text eggLabel() {
+        return Text.translatable(this.eggEnabled ? "rsl.menu.egg_on" : "rsl.menu.egg_off")
+                .formatted(this.eggEnabled ? Formatting.GOLD : Formatting.GRAY);
+    }
+
+    private void onEggSnapshot(EggClientNetwork.Snapshot snapshot) {
+        this.eggEnabled = snapshot.enabled();
+        if (this.eggButton != null) {
+            this.eggButton.setMessage(this.eggLabel());
+        }
+    }
+
+    private void onEggResult(EggClientNetwork.Result result) {
+        this.statusText = Text.translatable(result.messageKey())
+                .formatted(result.success() ? Formatting.GREEN : Formatting.RED);
+    }
+
+    private ButtonWidget primary(String key, Formatting color, int x, int y, int width, Runnable action) {
         return ButtonWidget.builder(Text.translatable(key).formatted(color), button -> action.run())
-                .dimensions(x, y, buttonWidth, BUTTON_H).build();
+                .dimensions(x, y, width, BUTTON_H).build();
+    }
+
+    private Text soundLabel() {
+        return Text.translatable(soundEnabled ? "rsl.menu.sound_on" : "rsl.menu.sound_off")
+                .formatted(soundEnabled ? Formatting.GOLD : Formatting.GRAY);
+    }
+
+    private void toggleSound() {
+        this.soundEnabled = !this.soundEnabled;
+        ModConfig.setSoundEnabled(this.soundEnabled);
+        if (this.soundButton != null) {
+            this.soundButton.setMessage(this.soundLabel());
+        }
     }
 
     private void sendAction(String action) {
@@ -147,8 +204,10 @@ public class GameplayScreen extends Screen {
 
     @Override
     public void close() {
+        ClientSounds.play(SoundEvents.ITEM_BOOK_PAGE_TURN, 0.4F, 0.85F);
         GameplayClientNetwork.setHandler(null);
         GameplayActionClientNetwork.setHandler(null);
+        EggClientNetwork.setHandlers(null, null);
         super.close();
     }
 

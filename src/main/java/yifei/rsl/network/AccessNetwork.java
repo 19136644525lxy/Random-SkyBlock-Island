@@ -77,6 +77,11 @@ public final class AccessNetwork {
 		if (player == null) {
 			return;
 		}
+		if (result.success) {
+			yifei.rsl.game.SoundFx.play(player, net.minecraft.sound.SoundEvents.ENTITY_PLAYER_LEVELUP, 0.4F, 1.4F);
+		} else {
+			yifei.rsl.game.SoundFx.play(player, net.minecraft.sound.SoundEvents.ENTITY_VILLAGER_NO, 0.6F, 1.0F);
+		}
 		PacketByteBuf buf = PacketByteBufs.create();
 		writeResult(buf, result);
 		ServerPlayNetworking.send(player, RESULT, buf);

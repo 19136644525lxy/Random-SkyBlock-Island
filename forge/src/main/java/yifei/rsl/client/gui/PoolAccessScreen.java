@@ -1,5 +1,7 @@
 package yifei.rsl.client.gui;
 
+import yifei.rsl.client.ClientSounds;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,6 +23,7 @@ import java.util.Set;
  * confirmation before the bulk grant/revoke reaches the server.
  */
 public final class PoolAccessScreen extends Screen {
+    private boolean openedSound;
     private static final int PANEL_W = 460;
     private static final int PANEL_H = 320;
     private static final int BUTTON_H = 20;
@@ -60,6 +63,10 @@ public final class PoolAccessScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!openedSound) {
+            openedSound = true;
+            ClientSounds.play(SoundEvents.BOOK_PAGE_TURN, 0.4F, 1.0F);
+        }
         panelWidth = Math.min(PANEL_W, width - 16);
         panelHeight = Math.min(PANEL_H, height - 16);
         panelX = (width - panelWidth) / 2;
@@ -289,6 +296,7 @@ public final class PoolAccessScreen extends Screen {
 
     @Override
     public void onClose() {
+        ClientSounds.play(SoundEvents.BOOK_PAGE_TURN, 0.4F, 0.85F);
         ClientAccessHandler.setHandlers(null, null);
         super.onClose();
     }

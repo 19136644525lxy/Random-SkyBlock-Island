@@ -26,6 +26,10 @@ public final class BlockPoolClientNetwork {
     }
 
     public static void sendMutation(List<String> add, List<String> remove) {
-        BlockPoolNetwork.sendMutationToServer(add, remove);
+        sendMutation(add, remove, List.of());
+    }
+
+    public static void sendMutation(List<String> add, List<String> remove, List<String> removeNbt) {
+        BlockPoolNetwork.sendMutationToServer(add, remove, removeNbt);
     }
 }

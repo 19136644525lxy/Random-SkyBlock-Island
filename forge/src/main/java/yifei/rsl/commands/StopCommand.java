@@ -1,5 +1,8 @@
 package yifei.rsl.commands;
 
+import yifei.rsl.game.SoundFx;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.server.level.ServerPlayer;
 import yifei.rsl.RandomSkyBlockIsland;
 import yifei.rsl.game.IslandGame;
 import com.mojang.brigadier.CommandDispatcher;
@@ -39,6 +42,11 @@ public class StopCommand {
         }
 
         game.stop();
+
+        ServerPlayer stopper = context.getSource().getPlayer();
+        if (stopper != null) {
+            SoundFx.play(stopper, SoundEvents.NOTE_BLOCK_BASS.value(), 0.8F, 0.8F);
+        }
 
         return 1;
     }

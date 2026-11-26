@@ -82,8 +82,12 @@ public final class BlockPoolClientNetwork {
     }
 
     public static void sendMutation(List<String> add, List<String> remove) {
+        sendMutation(add, remove, List.of());
+    }
+
+    public static void sendMutation(List<String> add, List<String> remove, List<String> removeNbt) {
         PacketByteBuf buf = PacketByteBufs.create();
-        BlockPoolNetwork.writeMutation(buf, add, remove);
+        BlockPoolNetwork.writeMutation(buf, add, remove, removeNbt);
         ClientPlayNetworking.send(BlockPoolNetwork.MUTATION, buf);
     }
 }

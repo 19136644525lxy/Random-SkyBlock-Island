@@ -9,6 +9,8 @@ import org.lwjgl.glfw.GLFW;
 import yifei.rsl.client.gui.GameplayScreen;
 import yifei.rsl.network.AccessClientNetwork;
 import yifei.rsl.network.BlockPoolClientNetwork;
+import yifei.rsl.network.CaptureStickClientNetwork;
+import yifei.rsl.network.EggClientNetwork;
 
 /**
  * Fabric client entrypoint. Only loaded on the physical client.
@@ -24,6 +26,8 @@ public class RslClient implements ClientModInitializer {
         GameplayClientNetwork.registerClient();
         GameplayActionClientNetwork.registerClient();
         AccessClientNetwork.registerClient();
+        EggClientNetwork.registerClient();
+        CaptureStickClientNetwork.registerClient();
         openPoolKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.rsl.open_pool", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_B, "key.categories.rsl"));
         openMenuKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(

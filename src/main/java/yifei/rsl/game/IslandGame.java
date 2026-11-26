@@ -2,9 +2,14 @@ package yifei.rsl.game;
 
 import yifei.rsl.RandomSkyBlockIsland;
 import yifei.rsl.common.config.AreaSpec;
+import yifei.rsl.common.config.PoolEntry;
+import yifei.rsl.common.config.RslSettings;
+import yifei.rsl.common.snapshot.RegionSnapshot;
+import yifei.rsl.common.snapshot.SnapshotArea;
 import yifei.rsl.common.world.FillCursor;
 import yifei.rsl.config.ModConfig;
 import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
 import net.minecraft.block.BlockState;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -25,6 +30,7 @@ public class IslandGame {
 	private final Random random;
 	private final IslandBossbar bossbar;
 	private final ArrayDeque<PendingAreaFill> pendingFills = new ArrayDeque<>();
+	private final ArrayDeque<RestoreArea> pendingRestores = new ArrayDeque<>();
 	private final List<String> completedSummaries = new ArrayList<>();
 	
 	private boolean isRunning = false;
@@ -75,6 +81,7 @@ public class IslandGame {
 	}
 	
 	public void tick() {
+		processRestore();
 		if (!isRunning) {
 			return;
 		}
@@ -133,6 +140,12 @@ public class IslandGame {
 		ModConfig.setRunning(true);
 		ModConfig.setSecondsRemaining(secondsRemaining);
 		ModConfig.saveState();
+
+		// Record the terrain once, before the very first transform, so reset can
+		// bring every area back to the state the player started from.
+		if (SnapshotStorage.saveIfAbsent(server, world, ModConfig.getUsableAreas())) {
+			RandomSkyBlockIsland.LOGGER.info("Recorded the pre-start block snapshot for reset");
+		}
 		
 		RandomSkyBlockIsland.LOGGER.info(
 				"Random SkyBlock Island game started in dimension {}", ModConfig.getActiveDimension());
@@ -155,6 +168,7 @@ public class IslandGame {
 		tickCount = 0;
 		stateFlushTicks = 0;
 		pendingFills.clear();
+		pendingRestores.clear();
 		completedSummaries.clear();
 		if (wasRunning) {
 			bossbar.removeBossbar();
@@ -206,7 +220,8 @@ public class IslandGame {
 		}
 		
 		List<Block> pool = ModConfig.getAllowedBlocks();
-		if (pool.isEmpty()) {
+		List<PoolEntry> containers = ModConfig.getNbtPoolEntries();
+		if (pool.isEmpty() && containers.isEmpty()) {
 			RandomSkyBlockIsland.LOGGER.error("Block pool is empty; stopping the game");
 			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
 				player.sendMessage(Text.translatable("rsl.message.block_pool_empty"), false);
@@ -225,13 +240,45 @@ public class IslandGame {
 			return;
 		}
 		
+		// 彩蛋模式：先清掉上一次生成的彩蛋岛，再按概率在玩家附近生成新的。
+		EggIslandSpawner eggSpawner = new EggIslandSpawner(server);
+		eggSpawner.clearRecordedIsland();
+		if (ModConfig.isEggModeEnabled() && !ModConfig.isEggPoolEmpty()
+				&& random.nextDouble() < ModConfig.getEggChance()) {
+			eggSpawner.trySpawn(world);
+		}
+
 		completedSummaries.clear();
 		int worldBottom = world.getBottomY();
 		int worldTop = world.getTopY();
 		
 		for (AreaSpec area : areas) {
-			Block selectedBlock = pool.get(random.nextInt(pool.size()));
-			BlockState state = selectedBlock.getDefaultState();
+			boolean allowContainers = !containers.isEmpty()
+					&& area.volumeSaturated() <= RslSettings.MAX_CONTAINER_AREA_VOLUME;
+			Block selectedBlock;
+			PoolEntry container = null;
+			if (allowContainers && !pool.isEmpty()) {
+				int total = pool.size() + containers.size();
+				int roll = random.nextInt(total);
+				if (roll < pool.size()) {
+					selectedBlock = pool.get(roll);
+				} else {
+					container = containers.get(roll - pool.size());
+					selectedBlock = BlockStateCodec.decode(container.state).getBlock();
+				}
+			} else if (allowContainers) {
+				container = containers.get(random.nextInt(containers.size()));
+				selectedBlock = BlockStateCodec.decode(container.state).getBlock();
+			} else if (!pool.isEmpty()) {
+				selectedBlock = pool.get(random.nextInt(pool.size()));
+			} else {
+				RandomSkyBlockIsland.LOGGER.warn(
+						"Area {} is too large for container entries and the plain pool is empty; skipping", area.name);
+				continue;
+			}
+			BlockState state = container != null
+					? BlockStateCodec.decode(container.state)
+					: selectedBlock.getDefaultState();
 			FillCursor cursor = new FillCursor(area, worldBottom, worldTop);
 			
 			if (cursor.isEmpty()) {
@@ -239,7 +286,7 @@ public class IslandGame {
 				continue;
 			}
 			
-			pendingFills.addLast(new PendingAreaFill(area, selectedBlock, state, cursor));
+			pendingFills.addLast(new PendingAreaFill(area, selectedBlock, state, container, cursor));
 		}
 		
 		secondsRemaining = ModConfig.getTransformDelaySeconds();
@@ -273,11 +320,11 @@ public class IslandGame {
 			PendingAreaFill fill = iterator.next();
 			
 			while (budget > 0 && fill.cursor.hasNext()) {
-				world.setBlockState(
-					new BlockPos(fill.cursor.x(), fill.cursor.y(), fill.cursor.z()),
-					fill.state,
-					3
-				);
+				BlockPos pos = new BlockPos(fill.cursor.x(), fill.cursor.y(), fill.cursor.z());
+				world.setBlockState(pos, fill.state, 3);
+				if (fill.container != null) {
+					NbtPayload.apply(world.getBlockEntity(pos), fill.container.nbt);
+				}
 				fill.cursor.advance();
 				budget--;
 			}
@@ -379,6 +426,73 @@ public class IslandGame {
 			updateBossbar();
 		}
 	}
+
+	/**
+	 * Starts restoring every recorded area to the pre-start snapshot. Called by
+	 * {@code reset}; the actual block writes are spread over ticks by
+	 * {@link #processRestore()}.
+	 *
+	 * @return {@code true} when a snapshot was loaded and a restore was queued
+	 */
+	public boolean beginRestore() {
+		RegionSnapshot snapshot = SnapshotStorage.load(server);
+		if (snapshot == null) {
+			return false;
+		}
+		ServerWorld world = findSnapshotWorld(snapshot.dimension());
+		if (world == null) {
+			RandomSkyBlockIsland.LOGGER.warn(
+					"Snapshot dimension {} is not loaded; cannot restore", snapshot.dimension());
+			return false;
+		}
+		pendingRestores.clear();
+		for (SnapshotArea area : snapshot.areas()) {
+			BlockState[] palette = new BlockState[area.palette().size()];
+			for (int i = 0; i < palette.length; i++) {
+				palette[i] = BlockStateCodec.decode(area.palette().get(i));
+			}
+			pendingRestores.addLast(new RestoreArea(world, area, palette));
+		}
+		RandomSkyBlockIsland.LOGGER.info(
+				"Restoring {} blocks from the pre-start snapshot", snapshot.blockCount());
+		return !pendingRestores.isEmpty();
+	}
+
+	private void processRestore() {
+		if (pendingRestores.isEmpty()) {
+			return;
+		}
+		int budget = Math.max(1, ModConfig.getBlocksPerTick());
+		Iterator<RestoreArea> iterator = pendingRestores.iterator();
+		while (iterator.hasNext() && budget > 0) {
+			RestoreArea restore = iterator.next();
+			while (budget > 0 && restore.index < restore.indices.length) {
+				int index = restore.index;
+				restore.world.setBlockState(restore.pos(index), restore.palette[restore.indices[index]], 3);
+				restore.index++;
+				budget--;
+			}
+			if (restore.index >= restore.indices.length) {
+				iterator.remove();
+			}
+		}
+		if (pendingRestores.isEmpty()) {
+			RandomSkyBlockIsland.LOGGER.info("Finished restoring the pre-start block snapshot");
+			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+				player.sendMessage(Text.translatable("rsl.message.reset_restored"), false);
+				SoundFx.play(player, net.minecraft.sound.SoundEvents.ENTITY_PLAYER_LEVELUP, 0.5F, 1.0F);
+			}
+		}
+	}
+
+	private ServerWorld findSnapshotWorld(String dimension) {
+		for (ServerWorld world : server.getWorlds()) {
+			if (world.getRegistryKey().getValue().toString().equals(dimension)) {
+				return world;
+			}
+		}
+		return null;
+	}
 	
 	public IslandBossbar getBossbar() {
 		return bossbar;
@@ -388,13 +502,38 @@ public class IslandGame {
 		private final AreaSpec area;
 		private final Block block;
 		private final BlockState state;
+		private final PoolEntry container;
 		private final FillCursor cursor;
 		
-		private PendingAreaFill(AreaSpec area, Block block, BlockState state, FillCursor cursor) {
+		private PendingAreaFill(AreaSpec area, Block block, BlockState state, PoolEntry container, FillCursor cursor) {
 			this.area = area;
 			this.block = block;
 			this.state = state;
+			this.container = container;
 			this.cursor = cursor;
+		}
+	}
+
+	private static final class RestoreArea {
+		private final ServerWorld world;
+		private final SnapshotArea area;
+		private final BlockState[] palette;
+		private final int[] indices;
+		private int index;
+
+		private RestoreArea(ServerWorld world, SnapshotArea area, BlockState[] palette) {
+			this.world = world;
+			this.area = area;
+			this.palette = palette;
+			this.indices = area.indices();
+		}
+
+		private BlockPos pos(int index) {
+			int z = index % this.area.sizeZ();
+			int rest = index / this.area.sizeZ();
+			int y = rest % this.area.sizeY();
+			int x = rest / this.area.sizeY();
+			return new BlockPos(this.area.minX() + x, this.area.minY() + y, this.area.minZ() + z);
 		}
 	}
 }

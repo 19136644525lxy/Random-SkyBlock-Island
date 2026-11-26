@@ -1,7 +1,11 @@
 package yifei.rsl.commands;
 
+import yifei.rsl.game.SoundFx;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.server.level.ServerPlayer;
 import yifei.rsl.RandomSkyBlockIsland;
 import yifei.rsl.config.ModConfig;
+import yifei.rsl.game.EggIslandSpawner;
 import yifei.rsl.game.IslandGame;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
@@ -41,14 +45,35 @@ public class ResetCommand {
         // 停止游戏（未运行时也会清理本地倒计时字段）
         game.stop();
 
+        // 清理上一次生成的彩蛋岛
+        new EggIslandSpawner(context.getSource().getServer()).clearRecordedIsland();
+
+        // 把区域方块还原到第一次开始前的快照
+        boolean restoring = game.beginRestore();
+
         // 重置运行时状态（保留区域和方块配置）
         ModConfig.setRunning(false);
         ModConfig.setSecondsRemaining(0);
         ModConfig.saveState();
 
-        context.getSource().sendSuccess(() -> Component.translatable("rsl.message.reset_done",
-                ModConfig.getAllAreas().size(),
-                ModConfig.getAllowedBlocks().size()), false);
+        if (restoring) {
+            context.getSource().sendSuccess(
+                    () -> Component.translatable("rsl.message.reset_restoring"), false);
+            ServerPlayer reseter = context.getSource().getPlayer();
+            if (reseter != null) {
+                SoundFx.play(reseter, SoundEvents.PLAYER_LEVELUP, 0.6F, 1.0F);
+            }
+        } else {
+            context.getSource().sendSuccess(
+                    () -> Component.translatable("rsl.message.reset_no_snapshot"), false);
+            context.getSource().sendSuccess(() -> Component.translatable("rsl.message.reset_done",
+                    ModConfig.getAllAreas().size(),
+                    ModConfig.getAllowedBlocks().size()), false);
+            ServerPlayer reseter = context.getSource().getPlayer();
+            if (reseter != null) {
+                SoundFx.play(reseter, SoundEvents.VILLAGER_NO, 0.7F, 1.0F);
+            }
+        }
 
         return 1;
     }

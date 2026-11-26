@@ -1,6 +1,7 @@
 package yifei.rsl;
 
 import yifei.rsl.commands.AccessCommand;
+import yifei.rsl.commands.EggCommand;
 import yifei.rsl.commands.StartCommand;
 import yifei.rsl.commands.StopCommand;
 import yifei.rsl.commands.AreaCommand;
@@ -10,15 +11,19 @@ import yifei.rsl.commands.ReloadCommand;
 import yifei.rsl.commands.ResetCommand;
 import yifei.rsl.commands.StatusCommand;
 import yifei.rsl.commands.WandCommand;
+import yifei.rsl.commands.SoundCommand;
 import yifei.rsl.config.ModConfig;
 import yifei.rsl.game.IslandGame;
 import yifei.rsl.item.SelectionWandItem;
 import yifei.rsl.item.WandSelectionManager;
 import yifei.rsl.network.AccessNetwork;
 import yifei.rsl.network.BlockPoolNetwork;
+import yifei.rsl.network.CaptureStickNetwork;
+import yifei.rsl.network.EggNetwork;
 import yifei.rsl.network.GameplayActionNetwork;
 import yifei.rsl.network.GameplayNetwork;
 import yifei.rsl.network.WandNetwork;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.common.MinecraftForge;
@@ -51,6 +56,8 @@ public class RandomSkyBlockIsland {
             DeferredRegister.create(ForgeRegistries.ITEMS, MOD_ID);
     public static final RegistryObject<Item> SELECTION_WAND =
             ITEMS.register("selection_wand", () -> new SelectionWandItem(new Item.Properties().stacksTo(1)));
+    public static final RegistryObject<Item> CAPTURE_STICK =
+            ITEMS.register("capture_stick", () -> new yifei.rsl.item.CaptureStickItem(new Item.Properties().stacksTo(1)));
 
     private static IslandGame islandGame;
 
@@ -65,6 +72,8 @@ public class RandomSkyBlockIsland {
         GameplayNetwork.register();
         GameplayActionNetwork.register();
         AccessNetwork.register();
+        EggNetwork.register();
+        CaptureStickNetwork.register();
 
         // 初始化配置（保留原 JSON 配置系统，与 Fabric 版格式完全一致）
         ModConfig.loadConfig();
@@ -93,6 +102,8 @@ public class RandomSkyBlockIsland {
         StatusCommand.register(event.getDispatcher());
         ReloadCommand.register(event.getDispatcher());
         WandCommand.register(event.getDispatcher());
+        EggCommand.register(event.getDispatcher());
+        SoundCommand.register(event.getDispatcher());
     }
 
     /**
@@ -110,6 +121,71 @@ public class RandomSkyBlockIsland {
             islandGame = new IslandGame(server);
         }
         islandGame.tick();
+    }
+
+    /**
+     * 收纳木棍：潜行 + 右键把有内容的容器方块（方块状态 + 方块实体 NBT）加入正常池。
+     */
+    @SubscribeEvent
+    public void onRightClickBlock(net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
+        if (!event.getEntity().isShiftKeyDown() || !event.getItemStack().is(CAPTURE_STICK.get())) {
+            return;
+        }
+        if (!(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)) {
+            return;
+        }
+        net.minecraft.world.level.block.entity.BlockEntity blockEntity = level.getBlockEntity(event.getPos());
+        if (!(blockEntity instanceof net.minecraft.world.Container container)) {
+            event.getEntity().sendSystemMessage(Component.translatable("rsl.message.capture_not_container"));
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer failedPlayer) {
+                yifei.rsl.game.SoundFx.play(failedPlayer, net.minecraft.sounds.SoundEvents.VILLAGER_NO, 0.6F, 1.0F);
+            }
+            event.setCanceled(true);
+            return;
+        }
+        boolean hasItems = false;
+        for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            if (!container.getItem(slot).isEmpty()) {
+                hasItems = true;
+                break;
+            }
+        }
+        if (!hasItems) {
+            event.getEntity().sendSystemMessage(Component.translatable("rsl.message.capture_empty"));
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer failedPlayer) {
+                yifei.rsl.game.SoundFx.play(failedPlayer, net.minecraft.sounds.SoundEvents.VILLAGER_NO, 0.6F, 1.0F);
+            }
+            event.setCanceled(true);
+            return;
+        }
+        net.minecraft.world.level.block.state.BlockState state = level.getBlockState(event.getPos());
+        net.minecraft.nbt.CompoundTag tag = blockEntity.saveWithoutMetadata();
+        String payload = yifei.rsl.game.NbtPayload.encode(tag);
+        if (payload.isEmpty()) {
+            event.getEntity().sendSystemMessage(Component.translatable("rsl.message.capture_failed"));
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer failedPlayer) {
+                yifei.rsl.game.SoundFx.play(failedPlayer, net.minecraft.sounds.SoundEvents.VILLAGER_NO, 0.6F, 1.0F);
+            }
+            event.setCanceled(true);
+            return;
+        }
+        if (payload.length() > yifei.rsl.common.config.PoolEntry.MAX_NBT_LENGTH) {
+            event.getEntity().sendSystemMessage(Component.translatable("rsl.message.capture_too_large"));
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer failedPlayer) {
+                yifei.rsl.game.SoundFx.play(failedPlayer, net.minecraft.sounds.SoundEvents.VILLAGER_NO, 0.6F, 1.0F);
+            }
+            event.setCanceled(true);
+            return;
+        }
+        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer serverPlayer)) {
+            return;
+        }
+        String id = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock()).toString();
+        String encodedState = yifei.rsl.game.BlockStateCodec.encode(state);
+        CaptureStickNetwork.beginCapture(serverPlayer, id, encodedState, payload, CaptureStickNetwork.displayName(tag));
+        event.setCanceled(true);
+        event.setUseBlock(net.minecraftforge.eventbus.api.Event.Result.DENY);
+        event.setUseItem(net.minecraftforge.eventbus.api.Event.Result.DENY);
     }
 
     /**

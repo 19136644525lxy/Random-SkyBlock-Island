@@ -21,9 +21,11 @@ import yifei.rsl.common.config.ConfigCodec;
 import yifei.rsl.common.config.DimensionId;
 import yifei.rsl.common.config.PoolAccess;
 import yifei.rsl.common.config.PoolAccessEntry;
+import yifei.rsl.common.config.PoolEntry;
 import yifei.rsl.common.config.PoolMutationResult;
 import yifei.rsl.common.config.RslSettings;
 import yifei.rsl.common.config.RslState;
+import yifei.rsl.game.BlockStateCodec;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -58,6 +60,7 @@ public final class ModConfig {
 	private static final List<AreaSpec> saveAreas = new ArrayList<>();
 	private static final List<String> allowedBlockIds = new ArrayList<>();
 	private static final List<Block> allowedBlocks = new ArrayList<>();
+	private static final List<PoolEntry> nbtPoolEntries = new ArrayList<>();
 	private static final List<String> invalidBlockIds = new ArrayList<>();
 	private static List<AreaSpec> pendingLegacyAreas = new ArrayList<>();
 	private static Path saveDir;
@@ -83,6 +86,8 @@ public final class ModConfig {
 				RandomSkyBlockIsland.LOGGER.warn("[RSL] {}", warning);
 			}
 			refreshBlockPool();
+			refreshEggPool();
+			refreshNbtPool();
 			loaded = true;
 			RandomSkyBlockIsland.LOGGER.info(
 					"[RSL] Loaded config: delay={}s, blocks={} (invalid={}), poolEditors={}",
@@ -98,6 +103,8 @@ public final class ModConfig {
 			worldLoaded = false;
 			activeDimension = null;
 			refreshBlockPool();
+			refreshEggPool();
+			refreshNbtPool();
 			loaded = true;
 		}
 	}
@@ -137,6 +144,24 @@ public final class ModConfig {
 
 	public static int getBroadcastRadius() {
 		return settings.broadcastRadius;
+	}
+
+	public static boolean isSoundEnabled() {
+		return settings.soundEnabled;
+	}
+
+	public static void setSoundEnabled(boolean enabled) {
+		settings.soundEnabled = enabled;
+		saveSettings();
+	}
+
+	public static double getSoundVolume() {
+		return settings.soundVolume;
+	}
+
+	public static void setSoundVolume(int percent) {
+		settings.soundVolume = Math.max(0, Math.min(100, percent)) / 100.0;
+		saveSettings();
 	}
 
 	public static int getGamePermissionLevel() {
@@ -327,7 +352,7 @@ public final class ModConfig {
 	}
 
 	public static boolean isBlockPoolEmpty() {
-		return allowedBlocks.isEmpty();
+		return allowedBlocks.isEmpty() && nbtPoolEntries.isEmpty();
 	}
 
 	public static BlockMutationResult addBlockId(String raw) {
@@ -372,7 +397,7 @@ public final class ModConfig {
 		}
 		String storedId = settings.allowedBlocks.remove(index);
 		refreshBlockPool();
-		if (state.isRunning && allowedBlocks.isEmpty()) {
+		if (state.isRunning && allowedBlocks.isEmpty() && nbtPoolEntries.isEmpty()) {
 			settings.allowedBlocks.add(Math.min(index, settings.allowedBlocks.size()), storedId);
 			refreshBlockPool();
 			return BlockMutationResult.WOULD_EMPTY_RUNNING;
@@ -417,10 +442,30 @@ public final class ModConfig {
 	 * pool is left untouched. Used by the block-pool screen.
 	 */
 	public static PoolMutationResult applyBlockMutations(List<String> add, List<String> remove) {
+		return applyBlockMutations(add, remove, List.of());
+	}
+
+	/**
+	 * Same as {@link #applyBlockMutations(List, List)} but also removes container
+	 * entries by their {@link PoolEntry#key()}.
+	 */
+	public static PoolMutationResult applyBlockMutations(List<String> add, List<String> remove,
+														 List<String> removeNbtKeys) {
 		List<String> previous = new ArrayList<>(settings.allowedBlocks);
+		List<PoolEntry> previousNbt = copyEntries(settings.nbtPool);
 		List<String> working = new ArrayList<>(settings.allowedBlocks);
+		List<PoolEntry> workingNbt = copyEntries(settings.nbtPool);
 		List<String> failed = new ArrayList<>();
 		BlockMutationResult firstError = null;
+
+		if (removeNbtKeys != null) {
+			for (String key : removeNbtKeys) {
+				if (key == null) {
+					continue;
+				}
+				workingNbt.removeIf(entry -> entry != null && entry.key().equals(key));
+			}
+		}
 
 		if (add != null) {
 			for (String raw : add) {
@@ -488,16 +533,22 @@ public final class ModConfig {
 		}
 
 		settings.allowedBlocks = working;
+		settings.nbtPool = workingNbt;
 		refreshBlockPool();
-		if (state.isRunning && allowedBlocks.isEmpty()) {
+		refreshNbtPool();
+		if (state.isRunning && allowedBlocks.isEmpty() && nbtPoolEntries.isEmpty()) {
 			settings.allowedBlocks = previous;
+			settings.nbtPool = previousNbt;
 			refreshBlockPool();
+			refreshNbtPool();
 			return PoolMutationResult.fail(BlockMutationResult.WOULD_EMPTY_RUNNING,
 					"rsl.message.blocks_would_empty", failed);
 		}
 		if (!saveSettings()) {
 			settings.allowedBlocks = previous;
+			settings.nbtPool = previousNbt;
 			refreshBlockPool();
+			refreshNbtPool();
 			return PoolMutationResult.fail(BlockMutationResult.IO_ERROR,
 					"rsl.message.blocks_save_failed", failed);
 		}
@@ -548,6 +599,286 @@ public final class ModConfig {
 		if (!invalidBlockIds.isEmpty()) {
 			RandomSkyBlockIsland.LOGGER.warn("[RSL] {} configured block id(s) are unavailable: {}",
 					invalidBlockIds.size(), invalidBlockIds);
+		}
+	}
+
+	// ========== NBT 容器池（正常池的一部分） ==========
+
+	public static List<PoolEntry> getNbtPoolEntries() {
+		return List.copyOf(nbtPoolEntries);
+	}
+
+	public static int getNbtPoolSize() {
+		return nbtPoolEntries.size();
+	}
+
+	public static BlockMutationResult addNbtPoolEntry(PoolEntry raw) {
+		if (raw == null) {
+			return BlockMutationResult.INVALID_ID;
+		}
+		String id = BlockId.normalize(raw.id);
+		if (id == null) {
+			return BlockMutationResult.INVALID_ID;
+		}
+		ResourceLocation identifier = ResourceLocation.tryParse(id);
+		if (identifier == null) {
+			return BlockMutationResult.INVALID_ID;
+		}
+		if (!ForgeRegistries.BLOCKS.containsKey(identifier)) {
+			return BlockMutationResult.UNKNOWN_BLOCK;
+		}
+		Block block = ForgeRegistries.BLOCKS.getValue(identifier);
+		if (block == null || block == Blocks.AIR) {
+			return BlockMutationResult.AIR_BLOCK;
+		}
+		net.minecraft.world.level.block.state.BlockState state = block.defaultBlockState();
+		if (raw.state != null && !raw.state.isEmpty()) {
+			net.minecraft.world.level.block.state.BlockState decoded = BlockStateCodec.decode(raw.state);
+			if (decoded != null && decoded.getBlock() == block) {
+				state = decoded;
+			}
+		}
+		String nbt = raw.nbt != null && PoolEntry.isValidBase64(raw.nbt) ? raw.nbt.trim() : "";
+		PoolEntry entry = new PoolEntry(id, BlockStateCodec.encode(state), nbt);
+		if (settings.allowedBlocks.size() + settings.nbtPool.size() >= MAX_POOL_SIZE) {
+			return BlockMutationResult.POOL_FULL;
+		}
+		for (PoolEntry existing : settings.nbtPool) {
+			if (existing != null && existing.key().equals(entry.key())) {
+				return BlockMutationResult.DUPLICATE;
+			}
+		}
+		settings.nbtPool.add(entry.copy());
+		refreshNbtPool();
+		if (!saveSettings()) {
+			settings.nbtPool.remove(settings.nbtPool.size() - 1);
+			refreshNbtPool();
+			return BlockMutationResult.IO_ERROR;
+		}
+		return BlockMutationResult.OK;
+	}
+
+	public static boolean removeNbtPoolKey(String key) {
+		if (key == null) {
+			return false;
+		}
+		List<PoolEntry> previous = copyEntries(settings.nbtPool);
+		if (!settings.nbtPool.removeIf(entry -> entry != null && entry.key().equals(key))) {
+			return false;
+		}
+		refreshNbtPool();
+		if (!saveSettings()) {
+			settings.nbtPool = previous;
+			refreshNbtPool();
+			return false;
+		}
+		return true;
+	}
+
+	private static void refreshNbtPool() {
+		nbtPoolEntries.clear();
+		Set<String> seen = new HashSet<>();
+		for (PoolEntry raw : settings.nbtPool) {
+			if (raw == null) {
+				continue;
+			}
+			String id = BlockId.normalize(raw.id);
+			if (id == null) {
+				continue;
+			}
+			ResourceLocation identifier = ResourceLocation.tryParse(id);
+			if (identifier == null || !ForgeRegistries.BLOCKS.containsKey(identifier)) {
+				continue;
+			}
+			Block block = ForgeRegistries.BLOCKS.getValue(identifier);
+			if (block == null || block == Blocks.AIR) {
+				continue;
+			}
+			net.minecraft.world.level.block.state.BlockState state = block.defaultBlockState();
+			if (raw.state != null && !raw.state.isEmpty()) {
+				net.minecraft.world.level.block.state.BlockState decoded = BlockStateCodec.decode(raw.state);
+				if (decoded != null && decoded.getBlock() == block) {
+					state = decoded;
+				}
+			}
+			String nbt = raw.nbt != null && PoolEntry.isValidBase64(raw.nbt) ? raw.nbt.trim() : "";
+			PoolEntry entry = new PoolEntry(id, BlockStateCodec.encode(state), nbt);
+			if (seen.add(entry.key())) {
+				nbtPoolEntries.add(entry);
+			}
+		}
+	}
+
+	private static List<PoolEntry> copyEntries(List<PoolEntry> source) {
+		List<PoolEntry> copy = new ArrayList<>();
+		if (source != null) {
+			for (PoolEntry entry : source) {
+				if (entry != null) {
+					copy.add(entry.copy());
+				}
+			}
+		}
+		return copy;
+	}
+
+	// ========== 彩蛋模式 ==========
+
+	private static final List<String> eggPoolIds = new ArrayList<>();
+	private static final List<Block> eggPoolBlocks = new ArrayList<>();
+
+	public static boolean isEggModeEnabled() {
+		return settings.eggModeEnabled;
+	}
+
+	/** Toggles the egg mode and persists it; rolls back on I/O failure. */
+	public static boolean setEggModeEnabled(boolean enabled) {
+		boolean previous = settings.eggModeEnabled;
+		settings.eggModeEnabled = enabled;
+		if (!saveSettings()) {
+			settings.eggModeEnabled = previous;
+			return false;
+		}
+		return true;
+	}
+
+	public static boolean toggleEggMode() {
+		return setEggModeEnabled(!settings.eggModeEnabled);
+	}
+
+	public static double getEggChance() {
+		return settings.eggChance;
+	}
+
+	public static boolean setEggChance(double chance) {
+		double previous = settings.eggChance;
+		settings.eggChance = Math.max(0.01, Math.min(1.0, chance));
+		if (!saveSettings()) {
+			settings.eggChance = previous;
+			return false;
+		}
+		return true;
+	}
+
+	public static int getEggMinRadius() {
+		return settings.eggMinRadius;
+	}
+
+	public static int getEggMaxRadius() {
+		return settings.eggMaxRadius;
+	}
+
+	public static boolean setEggRadius(int min, int max) {
+		int previousMin = settings.eggMinRadius;
+		int previousMax = settings.eggMaxRadius;
+		int clampedMin = Math.max(1, Math.min(256, min));
+		int clampedMax = Math.max(clampedMin, Math.min(512, max));
+		settings.eggMinRadius = clampedMin;
+		settings.eggMaxRadius = clampedMax;
+		if (!saveSettings()) {
+			settings.eggMinRadius = previousMin;
+			settings.eggMaxRadius = previousMax;
+			return false;
+		}
+		return true;
+	}
+
+	public static int getEggVolume() {
+		return settings.eggVolume;
+	}
+
+	public static boolean setEggVolume(int volume) {
+		int previous = settings.eggVolume;
+		settings.eggVolume = Math.max(1, Math.min(4096, volume));
+		if (!saveSettings()) {
+			settings.eggVolume = previous;
+			return false;
+		}
+		return true;
+	}
+
+	public static int getEggMinDistance() {
+		return settings.eggMinDistance;
+	}
+
+	public static boolean setEggMinDistance(int distance) {
+		int previous = settings.eggMinDistance;
+		settings.eggMinDistance = Math.max(1, Math.min(256, distance));
+		if (!saveSettings()) {
+			settings.eggMinDistance = previous;
+			return false;
+		}
+		return true;
+	}
+
+	public static List<String> getEggPoolIds() {
+		return List.copyOf(eggPoolIds);
+	}
+
+	public static List<Block> getEggPoolBlocks() {
+		return List.copyOf(eggPoolBlocks);
+	}
+
+	public static boolean isEggPoolEmpty() {
+		return eggPoolBlocks.isEmpty();
+	}
+
+	/**
+	 * Replaces the egg pool with the given ids. Invalid/unknown ids are dropped;
+	 * the caller is expected to have filtered them already for a UI-driven flow.
+	 */
+	public static boolean setEggPool(List<String> ids) {
+		List<String> previous = new ArrayList<>(settings.eggPool);
+		List<String> normalized = new ArrayList<>();
+		Set<String> seen = new HashSet<>();
+		if (ids != null) {
+			for (String raw : ids) {
+				String id = BlockId.normalize(raw);
+				if (id == null || !seen.add(id)) {
+					continue;
+				}
+				ResourceLocation identifier = ResourceLocation.tryParse(id);
+				if (identifier == null) {
+					continue;
+				}
+				Block block = ForgeRegistries.BLOCKS.getValue(identifier);
+				if (block == null || block == Blocks.AIR) {
+					continue;
+				}
+				normalized.add(id);
+			}
+		}
+		settings.eggPool = normalized;
+		refreshEggPool();
+		if (!saveSettings()) {
+			settings.eggPool = previous;
+			refreshEggPool();
+			return false;
+		}
+		return true;
+	}
+
+	private static void refreshEggPool() {
+		eggPoolIds.clear();
+		eggPoolBlocks.clear();
+		Set<String> seenIds = new HashSet<>();
+		Set<Block> seenBlocks = new HashSet<>();
+		for (String raw : settings.eggPool) {
+			String id = BlockId.normalize(raw);
+			if (id == null || !seenIds.add(id)) {
+				continue;
+			}
+			ResourceLocation identifier = ResourceLocation.tryParse(id);
+			if (identifier == null) {
+				continue;
+			}
+			Block block = ForgeRegistries.BLOCKS.getValue(identifier);
+			if (block == null || block == Blocks.AIR) {
+				continue;
+			}
+			eggPoolIds.add(id);
+			if (seenBlocks.add(block)) {
+				eggPoolBlocks.add(block);
+			}
 		}
 	}
 

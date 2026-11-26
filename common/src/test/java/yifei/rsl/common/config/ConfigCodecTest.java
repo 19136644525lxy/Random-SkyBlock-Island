@@ -27,7 +27,7 @@ class ConfigCodecTest {
 	void createsDefaultsWhenFilesAreMissing() throws IOException {
 		ConfigCodec.LoadResult result = codec().load();
 
-		assertEquals(2, result.settings.configVersion);
+		assertEquals(3, result.settings.configVersion);
 		assertEquals(180, result.settings.transformDelaySeconds);
 		assertEquals(269, result.settings.allowedBlocks.size());
 		assertFalse(result.state.isRunning);
@@ -119,7 +119,7 @@ class ConfigCodecTest {
 		assertEquals(v1, Files.readString(backup, StandardCharsets.UTF_8));
 
 		String migrated = Files.readString(dir.resolve("randomskyblockisland.json"), StandardCharsets.UTF_8);
-		assertTrue(migrated.contains("\"configVersion\": 2"));
+		assertTrue(migrated.contains("\"configVersion\": 3"));
 		assertFalse(migrated.contains("\"isRunning\""));
 		assertFalse(migrated.contains("\"secondsRemaining\""));
 		assertFalse(migrated.contains("\"areas\""));
@@ -166,7 +166,7 @@ class ConfigCodecTest {
 		assertFalse(loaded.recovered);
 		assertEquals(2, loaded.areas.areas.size());
 		assertEquals("farm", loaded.areas.areas.get(0).name);
-		assertEquals(2, loaded.areas.configVersion);
+		assertEquals(3, loaded.areas.configVersion);
 		assertEquals("minecraft:the_nether", loaded.areas.activeDimension);
 		assertEquals("default", loaded.areas.defaultArea.name);
 		assertEquals(-1, loaded.areas.defaultArea.minX);

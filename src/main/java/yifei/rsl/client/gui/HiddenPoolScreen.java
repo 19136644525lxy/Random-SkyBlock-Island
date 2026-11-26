@@ -1,5 +1,7 @@
 package yifei.rsl.client.gui;
 
+import yifei.rsl.client.ClientSounds;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -21,6 +23,7 @@ import java.util.List;
  * stay the per-context SHA-256 hash.
  */
 public final class HiddenPoolScreen extends Screen {
+    private boolean openedSound;
     private static final int PANEL_W = 400;
     private static final int PANEL_H = 320;
     private static final int BUTTON_H = 20;
@@ -53,6 +56,10 @@ public final class HiddenPoolScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!openedSound) {
+            openedSound = true;
+            ClientSounds.play(SoundEvents.ITEM_BOOK_PAGE_TURN, 0.4F, 1.0F);
+        }
         panelX = (this.width - PANEL_W) / 2;
         panelY = (this.height - PANEL_H) / 2;
         refreshingPools();
@@ -241,6 +248,7 @@ public final class HiddenPoolScreen extends Screen {
 
     @Override
     public void close() {
+        ClientSounds.play(SoundEvents.ITEM_BOOK_PAGE_TURN, 0.4F, 0.85F);
         cancel();
     }
 }

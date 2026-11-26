@@ -107,6 +107,11 @@ public final class AccessNetwork {
         if (player == null) {
             return;
         }
+        if (result.success) {
+            yifei.rsl.game.SoundFx.play(player, net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, 0.4F, 1.4F);
+        } else {
+            yifei.rsl.game.SoundFx.play(player, net.minecraft.sounds.SoundEvents.VILLAGER_NO, 0.6F, 1.0F);
+        }
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ResultS2C(result));
     }
 

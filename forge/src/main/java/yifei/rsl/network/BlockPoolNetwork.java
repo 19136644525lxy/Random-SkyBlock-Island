@@ -15,6 +15,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import yifei.rsl.client.ClientBlockPoolHandler;
 import yifei.rsl.common.config.BlockMutationResult;
 import yifei.rsl.common.config.BlockPoolSnapshot;
+import yifei.rsl.common.config.PoolEntry;
 import yifei.rsl.common.config.PoolMutationResult;
 import yifei.rsl.config.ModConfig;
 import yifei.rsl.permission.PoolPermissions;
@@ -58,7 +59,8 @@ public final class BlockPoolNetwork {
                 ModConfig.getInvalidBlockIds(),
                 ModConfig.getMaxPoolSize(),
                 0,
-                PoolPermissions.canUse(player));
+                PoolPermissions.canUse(player),
+                ModConfig.getNbtPoolEntries());
     }
 
     private static void sendSnapshot(ServerPlayer player) {
@@ -70,18 +72,19 @@ public final class BlockPoolNetwork {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new SnapshotS2C(snapshot(player)));
     }
 
-    private static void handleMutation(ServerPlayer player, List<String> add, List<String> remove) {
+    private static void handleMutation(ServerPlayer player, List<String> add, List<String> remove,
+                                       List<String> removeNbt) {
         if (!PoolPermissions.canUse(player)) {
             sendResult(player, PoolMutationResult.fail(BlockMutationResult.INVALID_ID,
                     "rsl.pool.no_permission", List.of()));
             return;
         }
-        if (add.size() > MAX_BATCH || remove.size() > MAX_BATCH) {
+        if (add.size() > MAX_BATCH || remove.size() > MAX_BATCH || removeNbt.size() > MAX_BATCH) {
             sendResult(player, PoolMutationResult.fail(BlockMutationResult.INVALID_ID,
                     "rsl.message.blocks_invalid_id", List.of()));
             return;
         }
-        PoolMutationResult result = ModConfig.applyBlockMutations(add, remove);
+        PoolMutationResult result = ModConfig.applyBlockMutations(add, remove, removeNbt);
         sendResult(player, result);
         if (result.success) {
             sendSnapshot(player);
@@ -93,7 +96,11 @@ public final class BlockPoolNetwork {
     }
 
     public static void sendMutationToServer(List<String> add, List<String> remove) {
-        CHANNEL.sendToServer(new MutationC2S(add, remove));
+        sendMutationToServer(add, remove, List.of());
+    }
+
+    public static void sendMutationToServer(List<String> add, List<String> remove, List<String> removeNbt) {
+        CHANNEL.sendToServer(new MutationC2S(add, remove, removeNbt));
     }
 
     private static void writeIds(FriendlyByteBuf buf, List<String> ids) {
@@ -119,11 +126,30 @@ public final class BlockPoolNetwork {
         buf.writeInt(snapshot.maxPool);
         buf.writeInt(snapshot.permissionLevel);
         buf.writeBoolean(snapshot.canEdit);
+        writeEntries(buf, snapshot.nbtPool);
     }
 
     private static BlockPoolSnapshot readSnapshot(FriendlyByteBuf buf) {
         return new BlockPoolSnapshot(readIds(buf), readIds(buf), readIds(buf),
-                buf.readInt(), buf.readInt(), buf.readBoolean());
+                buf.readInt(), buf.readInt(), buf.readBoolean(), readEntries(buf));
+    }
+
+    private static void writeEntries(FriendlyByteBuf buf, List<PoolEntry> entries) {
+        buf.writeInt(entries.size());
+        for (PoolEntry entry : entries) {
+            buf.writeUtf(entry.id == null ? "" : entry.id);
+            buf.writeUtf(entry.state == null ? "" : entry.state);
+            buf.writeUtf(entry.nbt == null ? "" : entry.nbt);
+        }
+    }
+
+    private static List<PoolEntry> readEntries(FriendlyByteBuf buf) {
+        int size = Math.max(0, Math.min(buf.readInt(), ModConfig.getMaxPoolSize()));
+        List<PoolEntry> entries = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            entries.add(new PoolEntry(buf.readUtf(), buf.readUtf(), buf.readUtf()));
+        }
+        return entries;
     }
 
     private static void writeResult(FriendlyByteBuf buf, PoolMutationResult result) {
@@ -184,26 +210,33 @@ public final class BlockPoolNetwork {
     public static class MutationC2S {
         private final List<String> add;
         private final List<String> remove;
+        private final List<String> removeNbt;
 
         public MutationC2S(List<String> add, List<String> remove) {
+            this(add, remove, List.of());
+        }
+
+        public MutationC2S(List<String> add, List<String> remove, List<String> removeNbt) {
             this.add = List.copyOf(add);
             this.remove = List.copyOf(remove);
+            this.removeNbt = List.copyOf(removeNbt);
         }
 
         public static void encode(MutationC2S msg, FriendlyByteBuf buf) {
             writeIds(buf, msg.add);
             writeIds(buf, msg.remove);
+            writeIds(buf, msg.removeNbt);
         }
 
         public static MutationC2S decode(FriendlyByteBuf buf) {
-            return new MutationC2S(readIds(buf), readIds(buf));
+            return new MutationC2S(readIds(buf), readIds(buf), readIds(buf));
         }
 
         public void handle(Supplier<NetworkEvent.Context> ctx) {
             ctx.get().enqueueWork(() -> {
                 ServerPlayer player = ctx.get().getSender();
                 if (player != null) {
-                    handleMutation(player, add, remove);
+                    handleMutation(player, add, remove, removeNbt);
                 }
             });
             ctx.get().setPacketHandled(true);

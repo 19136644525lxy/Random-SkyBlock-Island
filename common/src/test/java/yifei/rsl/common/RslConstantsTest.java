@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class RslConstantsTest {
 	@Test
-	void configVersionIsTwo() {
-		assertEquals(2, RslConstants.CONFIG_VERSION);
+	void configVersionIsThree() {
+		assertEquals(3, RslConstants.CONFIG_VERSION);
 	}
 
 	@Test
